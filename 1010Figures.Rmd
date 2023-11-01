@@ -1,0 +1,194 @@
+---
+title: "0924Est"
+output: html_document
+date: '2023-09-24'
+---
+
+```{r setup, include=FALSE}
+library(foreach)
+library(doParallel)
+library(stats)
+library(ggplot2)
+library(ks)
+library(tidyverse)
+library(rv)
+library(R.utils)
+library(segmented)
+library(rootSolve)
+library(gridExtra)
+library(cowplot)
+library(evmix)
+local = F
+if(local){
+  homedir='.'
+}else{
+  homedir='~/R/PCNN'
+}
+scriptsdir <- file.path(homedir, "PCNN")
+sourceDirectory(scriptsdir, recursive=TRUE, modifiedOnly=FALSE, verbose=TRUE)
+
+```
+
+# 1. Setup
+
+$ X \sim N(0,1) \quad m(x)= x + 0.1 x^3  \quad Y=m(X)+ \epsilon,\quad \epsilon\sim N(0,1)$
+
+
+```{r}
+## Parameters to set
+set_x_env(type="normal")
+set_model(type="non_monotone") 
+noise_type <- "homo"  # noiseless, homo, or hetero
+sigma=set_param(noise_type)
+set_y_env(noise_type, is_monotone = F)
+pX_unnorm <- build_pX_hat(m, fYtilde, fX, xlim=c(-20,20), normalize=F)
+
+
+N=10^6;r=50
+data1 = IS_sampler(N,r=r, n=150, true_FX = F)
+xLR = data.frame(xL=xL, xR=xR, type="known m")
+data2 = IS_sampler(N,r=r, n=150, type='plr', true_FX = F)
+xLR = rbind(xLR,data.frame(xL=xL, xR=xR, type="PLR"))
+o = fit_plr(data2 %>% mutate(x=x_vec,y=y_vec))
+rbind(data1 %>% mutate(type="known m"), data2 %>% mutate(type="PLR")) %>%
+  ggplot() + geom_point(aes(x_vec,y_vec)) +
+  geom_vline(data= xLR %>% pivot_longer(1:2, values_to = "xLR",names_to = "trType"),aes(xintercept = xLR, color="xL/xR"),linetype='dashed') +
+  scale_colour_manual(values=c("red"), labels=c("xL,xR"))+
+  labs(color="") +xlab("X")+ylab("Y") + facet_grid(~type)+
+  geom_line(data=data.frame(x = seq(mean(xLR$xL),mean(xLR$xR),length.out = 100 ))%>%
+              mutate("known m"=m(x),"PLR"=predict(o, data.frame(x=x))) %>%
+              pivot_longer(c("known m","PLR"), names_to = "type", values_to = "y"), aes(x,y))+
+  theme(
+    legend.direction="horizontal",
+    text=element_text(size=12),
+    legend.title=element_text(size=12),
+    legend.text=element_text(size=12),
+    legend.background = element_rect(fill="transparent"),
+    strip.text.x = element_text(size=12)
+  )
+
+```
+```{r}
+## Parameters to set
+a=3;C=1
+set_x_env(type="normal",x_mean = 5)
+set_model(type="hetero") 
+noise_type <- "hetero"  # noiseless, homo, or hetero
+sigma=set_param(noise_type)
+set_y_env(noise_type)
+pX_unnorm <- Vectorize(mprime)
+y_grid = seq(1e-8,50, length.out=500)
+plot_sampler(XY_sampler(10^6))+geom_hline(aes(yintercept=0))
+ model = kde(x=sample_y(sample_x(10^6)),w=rep(1,10^6), h=h/2)
+ fY2 <- function(y){predict(model, x=y)}
+ curve(log(fY(x)),from=0,to=50)
+ curve(log(fY2(x)),from=0,to=50,add=T, col='red')
+ integrate(fY2,lower=-10,upper=200)
+results2 = generate_ldens(y_grid,m_idx="hetero-homo",noise_type="homo",r=25, n=150, N = 10^6)
+h<-h/10
+Nbreaks<-3
+sample_y = sample_z
+mprime <- mtilde_prime
+pX_unnorm <- mtilde_prime
+fZ=function(x){fY(exp(x))/beta_prime(exp(x))}
+y_grid=seq(-3,6,length.out=500)
+results2 = generate_ldens(y_grid,m_idx="heteroZ",noise_type="homo",r=25, n=150, N = 10^7)
+
+```
+
+```{r}
+set_x_env(type="normal", x_sd=2)
+set_model(type="p5") 
+pX_unnorm <- mprime
+pX_unnorm <- Vectorize(pX_unnorm) 
+noise_sigma=20
+noise_type <- "homo"  # noiseless, homo, or hetero
+sigma=set_param(noise_type, noise_sigma = noise_sigma)
+set_y_env(noise_type)
+y_grid = seq(-1200,1200, length.out=2000)
+results = generate_ldens(y_grid,m_idx="p5",noise_type,r=25,n=150, N = 10^6, noise_sigma = noise_sigma)
+
+```
+
+```{r}
+## Parameters to set
+set_x_env(type="normal")
+set_model(type="p5") 
+pX_unnorm <- mprime
+pX_unnorm <- Vectorize(pX_unnorm) 
+noise_sigma=2
+noise_type <- "homo"  # noiseless, homo, or hetero
+sigma=set_param(noise_type, noise_sigma = noise_sigma)
+set_y_env(noise_type)
+y_grid = seq(-30,30, length.out=600)
+results = generate_ldens(y_grid,m_idx="p5",noise_type,r=25,n=150, N = 10^6, noise_sigma = noise_sigma)
+
+## Parameters to set
+noise_sigma=2
+set_x_env(type="normal")
+set_model(type="non_monotone") 
+noise_type <- "homo"  # noiseless, homo, or hetero
+sigma=set_param(noise_type, noise_sigma = noise_sigma)
+set_y_env(noise_type, is_monotone = F)
+pX_unnorm <- build_pX_hat(m, fYtilde, fX, xlim=c(-10,10), normalize=F)
+y_grid = seq(-30,30, length.out=600)
+results2 = generate_ldens(y_grid,m_idx="non_monotone-1",noise_type,r=25,n=150, N = 5*10^6, noise_sigma = noise_sigma)
+
+```
+
+
+
+
+```{r}
+results$trhold = rbind(results$trhold, results$trhold %>% filter(proposal=="optimal") %>% mutate(proposal="modified")
+) 
+results$trhold = results$trhold %>% mutate(proposal = factor(case_when(proposal=="random"~"random N",proposal=="plr"~"PLR", proposal=="total"~"random N0",proposal=="optimal"~"optimal N", proposal=="modified"~"modified N", proposal=="uniform"~"uniform N",.default = proposal), levels=c("random N","optimal N", "random N0", "modified N", "PLR", "uniform N"))) 
+df0 = results$df %>% filter(proposal=="true") 
+results$df = results$df %>% mutate(proposal = factor(case_when(proposal=="random"~"random N",proposal=="plr"~"PLR", proposal=="total"~"random N0",proposal=="optimal"~"optimal N", proposal=="modified"~"modified N", proposal=="uniform"~"uniform N",.default = proposal), levels=c("random N","optimal N", "random N0", "modified N", "PLR","uniform N","true"))) 
+
+ggplot() + 
+    geom_line(data= df0%>% filter( proposal!="uniform N") %>%
+                  dplyr::select(-c(proposal,N,rr, iteration)) ,aes(x=y, y=log(est_dens)), col='red') + 
+    #geom_line(aes(x=y, y=log(est_dens),group=iteration, color=factor(ifelse(is_support,"observed","extended"),levels=c("observed", "extended"))),alpha=0.1) + 
+    geom_point(data=subset(results$df,is_support & proposal!="true" & proposal!="uniform N"), aes(x=y, y=log(est_dens), color = "observed"),alpha=0.1,shape='.') +
+    geom_point(data=subset(results$df,!is_support& proposal!="true" & proposal!="uniform N "), aes(x=y, y=log(est_dens), color = "extended"),alpha=0.1,shape='.') +
+    facet_wrap(~proposal, ncol=3) +ylim(-20,0)+ xlim(-25,25)+
+    ylab("Log of Estimated Density") + labs(color="")+xlab("")+
+    geom_vline(data= results$trhold %>% filter( proposal!="uniform N") %>% pivot_longer(c("yL","yR"),names_to = "trhold", values_to="y") ,
+               aes(xintercept = y, color="50th Y"),linetype="dashed") +
+    scale_color_manual(
+        values=c("observed"="black", "extended"="blue", "50th Y"='green4'), 
+        labels=c("observed", "extended",'50th Y'),
+        breaks=c("observed", "extended", "50th Y")
+    )+
+    guides(color = guide_legend(override.aes = list(alpha = 1))) +
+    theme(
+        legend.position='top', 
+        legend.direction="horizontal",
+        text=element_text(size=12),
+        legend.title=element_text(size=12),
+        legend.text=element_text(size=12),
+        legend.background = element_rect(fill="transparent"),
+        strip.text.x = element_text(size=12)
+    )
+```
+```{r}
+data1 = IS_sampler(N,r=r,n=n, true_FX = F)
+xLR = data.frame(xL=xL, xR=xR, type="known m")
+data1 %>% mutate(type="known m") %>%
+  ggplot() + geom_point(aes(x_vec,y_vec)) +
+  geom_vline(data= xLR %>% pivot_longer(1:2, values_to = "xLR",names_to = "trType"),aes(xintercept = xLR, color="xL/xR"),linetype='dashed') +
+  scale_colour_manual(values=c("red"), labels=c("xL,xR"))+
+  labs(color="") +xlab("X")+ylab("Y") + facet_grid(~type)+
+  geom_line(data=data.frame(x = seq(mean(xLR$xL),mean(xLR$xR),length.out = 100 ))%>%
+              mutate("known m"=m(x),"PLR"=predict(o, data.frame(x=x))) %>%
+              pivot_longer(c("known m","PLR"), names_to = "type", values_to = "y"), aes(x,y))+
+  theme(
+    legend.direction="horizontal",
+    text=element_text(size=12),
+    legend.title=element_text(size=12),
+    legend.text=element_text(size=12),
+    legend.background = element_rect(fill="transparent"),
+    strip.text.x = element_text(size=12)
+  )
+```
