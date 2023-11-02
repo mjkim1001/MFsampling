@@ -23,7 +23,7 @@ generate_ldens <- function(y_grid,m_idx=1,noise_type,r=50, n=150, N = 10^6, nois
   # IS modified via GPD
   # KDE using random n
   # IS using predicted mean
-  results <- foreach( i = 1:5, .combine = combine_list,.errorhandling = "remove") %dopar% {
+  results <- foreach( i = 1:100, .combine = combine_list,.errorhandling = "remove") %dopar% {
     set.seed(i)
     trhold <- NULL
     df <- NULL

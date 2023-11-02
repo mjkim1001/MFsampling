@@ -126,7 +126,7 @@ set_param <- function(noise_type, noise_sigma=1){
   return(sigma)}
 
 
-set_y_env <- function(noise_type, is_monotone=TRUE, ytlim=NULL){
+set_y_env <- function(noise_type, is_monotone=TRUE, ytlim=NULL, a=0,b=0){
   sample_y <<- function(x){
     m(x) + sigma(x)*rnorm(1, mean=0, sd=noise_sigma)
   }
@@ -188,18 +188,18 @@ set_y_env <- function(noise_type, is_monotone=TRUE, ytlim=NULL){
     
   }else if(noise_type=="hetero"){
     fY <<- function(y){
-      func <- function(z){1/(C*(1+z)) * dlnorm(y/(C*(1+z)),meanlog=x_mean/a, sdlog=1/a)*dnorm(z, mean=0, sd=noise_sigma)}
-      return(integrate(func, lower=-6*noise_sigma, upper=6*noise_sigma)$value)
+      func <- function(z){1/(a*(1+z)) * dlnorm(y/(a*(1+z)),meanlog=x_mean/b, sdlog=1/b)*dnorm(z, mean=0, sd=noise_sigma)}
+      return(integrate(func, lower=-5*noise_sigma, upper=5*noise_sigma)$value)
     }
     fY <<- Vectorize(fY)
     
-    b <<- function(y){ log(y) }
+    trans <<- function(y){ log(y) }
     sample_z <<- function(x){
-      b(m(x) + sigma(x)*rnorm(1, mean=0, sd=noise_sigma))
+      trans(m(x) + sigma(x)*rnorm(1, mean=0, sd=noise_sigma))
     }
     sample_z <<- Vectorize(sample_z) ## Now it is sample_z
     
-    mtilde_prime <<- function(x){1/a}
+    mtilde_prime <<- function(x){1/b}
     beta_prime <<- function(y){1/y}
   }
 }

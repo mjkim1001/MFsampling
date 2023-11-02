@@ -116,7 +116,7 @@ generate_dens<-function(data, proposal, grid=NULL, h0=h, itr=0, N0=N, rr=50, r=5
   }
   model <- kde(x=data$y_vec, w=data$weights*(nrow(data))/sum(data$weights), h=h0)
   if(hetero){
-    is_support = (b(y_grid)>=min(data$y_vec) & b(y_grid) <=max(data$y_vec) )
+    is_support = (trans(y_grid)>=min(data$y_vec) & trans(y_grid) <=max(data$y_vec) )
   }else{
     is_support = (y_grid>=min(data$y_vec) & y_grid <=max(data$y_vec) )
   }
@@ -160,7 +160,7 @@ generate_dens<-function(data, proposal, grid=NULL, h0=h, itr=0, N0=N, rr=50, r=5
     #   }
     # })
     if(hetero){
-      dens =beta_prime(y_grid) * sapply(b(y_grid), function(x){
+      dens =beta_prime(y_grid) * sapply(trans(y_grid), function(x){
         if(x <= yL){ 
           return(evmix::dgpd(-x,u=-yL, xi = xiL,  sigmau = sigmaL , phiu=FbarL)*cL)
         }else if(x > yR){
@@ -183,7 +183,7 @@ generate_dens<-function(data, proposal, grid=NULL, h0=h, itr=0, N0=N, rr=50, r=5
     
   }else{ # When importance sampler is used.
     if(hetero){
-      dens = sapply(y_grid,function(x) beta_prime(x)*predict(model, x=b(x)))
+      dens = sapply(y_grid,function(x) beta_prime(x)*predict(model, x=trans(x)))
     }else{
       dens = sapply(y_grid,function(x) predict(model, x=x))
     }
@@ -198,60 +198,15 @@ XY_sampler<-function(N){
   return(data.frame(x_vec,y_vec, weights=1 ))
 }
 
-plot_data<-function(N, grid, type="optimal",r=50, rr0=40){
-  #temporary plotting for myself
-  if(type=="all"){
-    data = XY_sampler(N)
+plot_sampler <-function(data,r=NULL){
+  xL = data$x_vec[r]; xR=data$x_vec[nrow(data)-r+1]
+  if(is.null(r)){
+    return(ggplot(data) + geom_point(aes(x_vec,y_vec)) + ggtitle("Scatter plot of X and Y"))
   }else{
-    data= IS_sampler(N,r=50, true_FX = F)
+    return(ggplot(data) + geom_point(aes(x_vec,y_vec)) + ggtitle("Scatter plot of sampled X and Y") + 
+             geom_vline(data= data.frame(xLR=c(xL,xR)),aes(xintercept = xLR, color="xL/xR")) +
+             scale_colour_manual(
+               values=c("red"),
+               labels=c("xL/xR")) )
   }
-  trhold <- do.call(rbind, lapply(c(10, 20, 40, 50), function(rr){threshold_IS(data, N0=N, rr = rr)}))
-  ylim_plot <- summary(data$y_vec)[c(1,6)]
-  
-  if(type=="optimal"){
-    df = generate_dens(data,"optimal", grid, h0=h, N0=N, r=r)
-  }else if(type=="modified"){
-    df = generate_dens(data,"modified", grid, h0=h, N0=N, rr=rr0, r=r)
-  }else if(type=="all"){
-    df = generate_dens(data,"random", grid, h0=h, N0=N, r=r)
-  }
-  
-  plot(df$y[df$y>= ylim_plot[1] & df$y <= ylim_plot[2]], log(df$est_dens[df$y>= ylim_plot[1] & df$y <= ylim_plot[2]]),pch='.',ylab="log dens", col=rgb(0,0,0,0.7), ylim = c(-20,0),xlim=c(-25,25), xlab="y")
-  points(df$y[df$y < ylim_plot[1] | df$y > ylim_plot[2]], log(df$est_dens[df$y < ylim_plot[1] | df$y > ylim_plot[2]]),pch='.',ylab="log dens", col=rgb(0,1,0,0.7), ylim = c(-20,0),xlim=c(-25,25))
-  curve( log(fY(x)), ylim[1],ylim[2], add=T, col="blue")
-  
-  for(i in 1:9) {
-    if(type=="all"){
-      data = XY_sampler(N)
-    }else{
-      data= IS_sampler(N,r=50)
-    }
-    trhold <- rbind(trhold,do.call(rbind, lapply(c(10, 20, 40, 50), function(rr){threshold_IS(data, N0=N, rr = rr)})))
-    ylim_plot <- summary(data$y_vec)[c(1,6)]
-    
-    if(type=="optimal"){
-      df = generate_dens(data,"optimal", grid, h0=h, N0=N, r=r)
-    }else if(type=="modified"){
-      df = generate_dens(data,"modified", grid, h0=h, N0=N, rr= rr0, r=r)
-    }else if(type=="all"){
-      df = generate_dens(data,"random", grid, h0=h/2, N0=N, r=r)
-    }
-    points(df$y[df$y>= ylim_plot[1] & df$y <= ylim_plot[2]], log(df$est_dens[df$y>= ylim_plot[1] & df$y <= ylim_plot[2]]),pch='.',ylab="log dens", col=rgb(0,0,0,0.7), ylim = c(-25,0),xlim=c(-30,30), xlab="y")
-    points(df$y[df$y < ylim_plot[1] | df$y > ylim_plot[2]], log(df$est_dens[df$y < ylim_plot[1] | df$y > ylim_plot[2]]),pch='.',ylab="log dens", col=rgb(0,1,0,0.7), ylim = c(-25,0),xlim=c(-30,30))
-  }
-  
-  trhold= as.data.frame(trhold)
-  if(type=="modified"){
-    r_range<- c(rr0)
-  }else{
-    r_range<- c(50,20,10)
-  }
-  # Add vertical lines at certain percentiles of data$y_vec
-  for(rrr in r_range){
-    for( yy in (trhold %>% filter(rr==rrr))[c('yL','yR')] ){
-      abline(v=yy , col=c("red","green4","purple")[which(rrr==r_range)], lty=2)
-    }
-    text(x=trhold %>% filter(rr==rrr) %>% summarize(yL=min(yL)-2,yR=max(yR)+2), y = -2, srt=90, sprintf("%dth",rrr),col=c("red","green4","purple")[which(rrr==r_range)])
-  }
-  
 }
