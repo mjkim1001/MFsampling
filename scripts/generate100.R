@@ -59,7 +59,7 @@ generate_ldens <- function(y_grid,m_idx=1,noise_type,r=50, n=150, N = 10^6, nois
     return(list(dataUsed=dataUsed, df=df, trhold=trhold))
   }
   results$df = rbind(df0, results$df)
-  saveRDS(results,  paste(homedir,sprintf("figures/m%sN%d_%s_noise%d.rds", m_idx,ifelse(is.integer(log10(N)),log10(N),N),noise_type,noise_sigma) ,sep="/") )
+  saveRDS(results,  paste(homedir,sprintf("figures/m%sN%d_%s_noise%d.rds", m_idx,ifelse(log10(N) %% 1,N,log10(N)),noise_type,noise_sigma) ,sep="/") )
   save_png(results, y_grid, m_idx=m_idx, noise_type=noise_type, r=r,N=N, noise_sigma=noise_sigma)
   return(results)
 }
@@ -91,7 +91,7 @@ save_png <-function(results, y_grid, plotType = c("random","uniform","optimal","
       )
     
     
-    fname = paste(homedir,sprintf("figures/p1_m%sN%d_%s_noise%d.png", m_idx,ifelse(is.integer(log10(N)),log10(N),N),noise_type,noise_sigma) ,sep="/")
+    fname = paste(homedir,sprintf("figures/p1_m%sN%d_%s_noise%d.png", m_idx,ifelse(log10(N) %% 1,N,log10(N)),noise_type,noise_sigma) ,sep="/")
     ggsave(filename = fname, plot = p1, width = 10, height = 8)
   }else{
     df_var1 <- subset(results$df,is_support) %>%
@@ -132,7 +132,7 @@ save_png <-function(results, y_grid, plotType = c("random","uniform","optimal","
         legend.text=element_text(size=12)
       )
     
-    fname = paste(homedir,sprintf("figures/p2_m%sN%d_%s_noise%d.png", m_idx,ifelse(is.integer(log10(N)),log10(N),N),noise_type,noise_sigma) ,sep="/")
+    fname = paste(homedir,sprintf("figures/p2_m%sN%d_%s_noise%d.png", m_idx,ifelse(log10(N) %% 1,N,log10(N)),noise_type,noise_sigma) ,sep="/")
     ggsave(filename = fname, plot = p2, width = 10, height = 5)
   }
 }
@@ -172,7 +172,7 @@ generate_vars <- function(y_grid,m_idx=1,noise_type,r=50, n=150, N = 10^6, noise
     
     return(list(dataUsed=dataUsed, df=df, trhold=trhold))
   }
-  saveRDS(results,  paste(homedir,sprintf("figures/Varm%sN%d_%s_noise%d.rds", m_idx,ifelse(is.integer(log10(N)),log10(N),N),noise_type,noise_sigma) ,sep="/") )
+  saveRDS(results,  paste(homedir,sprintf("figures/Varm%sN%d_%s_noise%d.rds", m_idx,ifelse(log10(N) %% 1,N,log10(N)),noise_type,noise_sigma) ,sep="/") )
   save_png(results, y_grid,  m_idx=m_idx, noise_type=noise_type, r=r,N=N, noise_sigma=1, figure=2)
   return(results)
 }
@@ -212,7 +212,7 @@ generate_unif <- function(y_grid,m_idx=1,noise_type,r=50, n=150, N = 10^6, noise
     return(list(dataUsed=dataUsed, df=df, trhold=trhold))
   }
   results$df = rbind(df0, results$df)
-  saveRDS(results, sprintf("~/R/PCNN/PCNN/Unifm%sr%dN%d_%s_noise%d.rds", m_idx,r, ifelse(is.integer(log10(N)),log10(N),N), noise_type,noise_sigma) )
+  saveRDS(results, sprintf("~/R/PCNN/PCNN/Unifm%sr%dN%d_%s_noise%d.rds", m_idx,r, ifelse(log10(N) %% 1,N,log10(N)), noise_type,noise_sigma) )
   save_png(results, y_grid, m_idx=m_idx, noise_type=noise_type, r=r,N=N, noise_sigma=noise_sigma)
   return(results)
 }

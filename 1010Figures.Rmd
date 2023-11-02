@@ -18,7 +18,7 @@ library(rootSolve)
 library(gridExtra)
 library(cowplot)
 library(evmix)
-homedir='.'
+homedir='~/R/MFsampling'
 scriptsdir <- file.path(homedir, "scripts")
 sourceDirectory(scriptsdir, recursive=TRUE, modifiedOnly=FALSE, verbose=TRUE)
 
