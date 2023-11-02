@@ -64,8 +64,8 @@ set_model<-function(type="p3"){
     minv <<- function(y){ a*log(y/C) }
     Nbreaks<<-10
   }else if(type=="p5"){
-    m <<- function(x){(x + 0.1*x^3 +0.01*x^5)}
-    mprime <<- function(x){(1+0.3*x^2 +0.05*x^4)}
+    m <<- function(x){(x + 0.2*x^3 +0.02*x^5)}
+    mprime <<- function(x){(1+0.6*x^2 +0.1*x^4)}
     minv <<- function(y){
       uniroot(function(x){m(x)-y}, c(-20,20))[['root']]
     }

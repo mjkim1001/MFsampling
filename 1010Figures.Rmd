@@ -18,21 +18,13 @@ library(rootSolve)
 library(gridExtra)
 library(cowplot)
 library(evmix)
-local = F
-if(local){
-  homedir='.'
-}else{
-  homedir='~/R/PCNN'
-}
-scriptsdir <- file.path(homedir, "PCNN")
+homedir='.'
+scriptsdir <- file.path(homedir, "scripts")
 sourceDirectory(scriptsdir, recursive=TRUE, modifiedOnly=FALSE, verbose=TRUE)
 
 ```
 
 # 1. Setup
-
-$ X \sim N(0,1) \quad m(x)= x + 0.1 x^3  \quad Y=m(X)+ \epsilon,\quad \epsilon\sim N(0,1)$
-
 
 ```{r}
 ## Parameters to set

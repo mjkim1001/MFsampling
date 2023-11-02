@@ -23,7 +23,7 @@ generate_ldens <- function(y_grid,m_idx=1,noise_type,r=50, n=150, N = 10^6, nois
   # IS modified via GPD
   # KDE using random n
   # IS using predicted mean
-  results <- foreach( i = 1:100, .combine = combine_list,.errorhandling = "remove") %dopar% {
+  results <- foreach( i = 1:10, .combine = combine_list,.errorhandling = "remove") %dopar% {
     set.seed(i)
     trhold <- NULL
     df <- NULL
@@ -59,7 +59,7 @@ generate_ldens <- function(y_grid,m_idx=1,noise_type,r=50, n=150, N = 10^6, nois
     return(list(dataUsed=dataUsed, df=df, trhold=trhold))
   }
   results$df = rbind(df0, results$df)
-  saveRDS(results, sprintf("~/R/PCNN/PCNN/m%sr%dN%d_%s_noise%d.rds", m_idx,r,(N), noise_type,noise_sigma) )
+  saveRDS(results,  paste(homedir,sprintf("figures/m%sN%d_%s_noise%d.rds", m_idx,(N),noise_type,noise_sigma) ,sep="/") )
   save_png(results, y_grid, m_idx=m_idx, noise_type=noise_type, r=r,N=N, noise_sigma=noise_sigma)
   return(results)
 }
@@ -91,7 +91,7 @@ save_png <-function(results, y_grid, plotType = c("random","uniform","optimal","
       )
     
     
-    fname = sprintf("~/R/PCNN/PCNN/p1_m%sr%dN%d_%s_noise%d.png", m_idx,r,  (N),noise_type,noise_sigma) 
+    fname = paste(homedir,sprintf("figures/p1_m%sN%d_%s_noise%d.png", m_idx,(N),noise_type,noise_sigma) ,sep="/")
     ggsave(filename = fname, plot = p1, width = 10, height = 8)
   }else{
     df_var1 <- subset(results$df,is_support) %>%
@@ -132,7 +132,7 @@ save_png <-function(results, y_grid, plotType = c("random","uniform","optimal","
         legend.text=element_text(size=12)
       )
     
-    fname = sprintf("~/R/PCNN/PCNN/p2_m%sr%dN%d_%s_noise%d.png", m_idx,r,  (N),noise_type,noise_sigma) 
+    fname = paste(homedir,sprintf("figures/p2_m%sN%d_%s_noise%d.png", m_idx,(N),noise_type,noise_sigma) ,sep="/")
     ggsave(filename = fname, plot = p2, width = 10, height = 5)
   }
 }
@@ -145,17 +145,8 @@ generate_vars <- function(y_grid,m_idx=1,noise_type,r=50, n=150, N = 10^6, noise
     mapply(rbind, x, ..., SIMPLIFY = F)
   }
   
-  # df contains estimated density value per each grid and method.
-  # First, generate true fY values.
-
-  #For 100 iteration, save the following:
-  # KDE using all N
-  # IS using optimal
-  # IS modified via GPD
-  # KDE using random n
-  # IS using predicted mean
   data = IS_sampler(N, r ,n=n,type="optimal", true_FX = FALSE) 
-  results <- foreach( i = 1:100, .combine = combine_list,.errorhandling = "remove") %dopar% {
+  results <- foreach( i = 1:10, .combine = combine_list,.errorhandling = "remove") %dopar% {
     set.seed(i)
     trhold <- NULL
     df <- NULL
@@ -178,18 +169,10 @@ generate_vars <- function(y_grid,m_idx=1,noise_type,r=50, n=150, N = 10^6, noise
     dataUsed = rbind(dataUsed, data %>% mutate(proposal="random", itr=i, N0=N, r=r))
     df = rbind(df,generate_dens(data,"random", y_grid, h0=h, N0=N, itr=i, rr= r, r=r, hetero=hetero))
     trhold = rbind(trhold, threshold_IS(data, N0=N,itr=i, rr= r) %>% mutate(proposal="random"))
-    # data = IS_sampler(N, r=r,n=n, type="plr", x_left=x_left,x_right=x_right, true_FX = FALSE)
-    # dataUsed = rbind(dataUsed, data %>% mutate(proposal="plr", itr=i, N0=N, r=r))
-    # df = rbind(df,generate_dens(data,"plr", y_grid, h0=h, N0=N, itr=i, rr= r, r=r, hetero=hetero) )
-    # trhold = rbind(trhold, threshold_IS(data, N0=N,itr=i, rr= r) %>% mutate(proposal="plr"))
-    # df = rbind(df,generate_dens(data,"plr-modified", y_grid, h0=h, N0=N, itr=i, rr= r, r=r, hetero=hetero))
-    # trhold = rbind(trhold, threshold_IS(data, N0=N,itr=i, rr= r) %>% mutate(proposal="plr-modified"))
-    if(hetero){
-      trhold = trhold %>% mutate(yL = exp(yL), yR = exp(yR))
-    }
+    
     return(list(dataUsed=dataUsed, df=df, trhold=trhold))
   }
-  saveRDS(results, sprintf("~/R/PCNN/PCNN/Varm%sr%dN%d_%s_noise%d.rds", m_idx,r, (N), noise_type,noise_sigma) )
+  saveRDS(results,  paste(homedir,sprintf("figures/Varm%sN%d_%s_noise%d.rds", m_idx,(N),noise_type,noise_sigma) ,sep="/") )
   save_png(results, y_grid,  m_idx=m_idx, noise_type=noise_type, r=r,N=N, noise_sigma=1, figure=2)
   return(results)
 }
