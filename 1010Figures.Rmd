@@ -27,7 +27,38 @@ sourceDirectory(scriptsdir, recursive=TRUE, modifiedOnly=FALSE, verbose=TRUE)
 # 1. Setup
 
 ```{r}
+m<-function(x){(x + 0.1*x^3 +0.01*x^5)}
+curve(m,from=-5,to=5)
+```
+
+```{r}
+set_x_env(type="normal")
+set_model(type="p5") 
+noise_sigma=1
+noise_type <- "homo"  # noiseless, homo, or hetero
+sigma=set_param(noise_type, noise_sigma = noise_sigma)
+set_y_env(noise_type)
+pX_unnorm <- Vectorize(mprime)
+y_grid = seq(-1200,1200, length.out=2000)
+results = generate_ldens(y_grid,m_idx="p5",noise_type,r=25,n=150, N = 10^6, noise_sigma = noise_sigma)
+
+```
+
+```{r}
 ## Parameters to set
+set_x_env(type="normal")
+set_model(type="p5") 
+noise_sigma=2
+noise_type <- "homo"  # noiseless, homo, or hetero
+sigma=set_param(noise_type, noise_sigma = noise_sigma)
+set_y_env(noise_type)
+pX_unnorm <- Vectorize(mprime)
+
+N=10^6;r=25
+data1 = IS_sampler(N,r=r, n=150, true_FX = F)
+xLR = data.frame(xL=xL, xR=xR, type="m1")
+m1<-m
+
 set_x_env(type="normal")
 set_model(type="non_monotone") 
 noise_type <- "homo"  # noiseless, homo, or hetero
@@ -37,10 +68,10 @@ pX_unnorm <- build_pX_hat(m, fYtilde, fX, xlim=c(-20,20), normalize=F)
 
 
 N=10^6;r=50
-data1 = IS_sampler(N,r=r, n=150, true_FX = F)
-xLR = data.frame(xL=xL, xR=xR, type="known m")
-data2 = IS_sampler(N,r=r, n=150, type='plr', true_FX = F)
-xLR = rbind(xLR,data.frame(xL=xL, xR=xR, type="PLR"))
+data2 = IS_sampler(N,r=r, n=150, true_FX = F)
+xLR = rbind(xLR,data.frame(xL=xL, xR=xR, type="m2"))
+m2<-m
+
 o = fit_plr(data2 %>% mutate(x=x_vec,y=y_vec))
 rbind(data1 %>% mutate(type="known m"), data2 %>% mutate(type="PLR")) %>%
   ggplot() + geom_point(aes(x_vec,y_vec)) +
@@ -60,6 +91,22 @@ rbind(data1 %>% mutate(type="known m"), data2 %>% mutate(type="PLR")) %>%
   )
 
 ```
+```{r}
+## Parameters to set
+set_x_env(type="normal")
+set_model(type="p5") 
+pX_unnorm <- mprime
+pX_unnorm <- Vectorize(pX_unnorm) 
+noise_sigma=2
+noise_type <- "homo"  # noiseless, homo, or hetero
+sigma=set_param(noise_type, noise_sigma = noise_sigma)
+set_y_env(noise_type)
+y_grid = seq(-150,150, length.out=600)
+results = generate_ldens(y_grid,m_idx="p5",noise_type,r=25,n=150, N =10^7, noise_sigma = noise_sigma)
+```
+
+
+
 ```{r}
 ## Parameters to set
 a=3;C=1
@@ -88,33 +135,10 @@ results2 = generate_ldens(y_grid,m_idx="heteroZ",noise_type="homo",r=25, n=150, 
 
 ```
 
-```{r}
-set_x_env(type="normal", x_sd=2)
-set_model(type="p5") 
-pX_unnorm <- mprime
-pX_unnorm <- Vectorize(pX_unnorm) 
-noise_sigma=20
-noise_type <- "homo"  # noiseless, homo, or hetero
-sigma=set_param(noise_type, noise_sigma = noise_sigma)
-set_y_env(noise_type)
-y_grid = seq(-1200,1200, length.out=2000)
-results = generate_ldens(y_grid,m_idx="p5",noise_type,r=25,n=150, N = 10^6, noise_sigma = noise_sigma)
 
-```
+
 
 ```{r}
-## Parameters to set
-set_x_env(type="normal")
-set_model(type="p5") 
-pX_unnorm <- mprime
-pX_unnorm <- Vectorize(pX_unnorm) 
-noise_sigma=2
-noise_type <- "homo"  # noiseless, homo, or hetero
-sigma=set_param(noise_type, noise_sigma = noise_sigma)
-set_y_env(noise_type)
-y_grid = seq(-30,30, length.out=600)
-results = generate_ldens(y_grid,m_idx="p5",noise_type,r=25,n=150, N = 10^6, noise_sigma = noise_sigma)
-
 ## Parameters to set
 noise_sigma=2
 set_x_env(type="normal")
