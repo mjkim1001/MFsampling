@@ -18,7 +18,8 @@ library(rootSolve)
 library(gridExtra)
 library(cowplot)
 library(evmix)
-homedir='~/R/MFsampling'
+#homedir='~/R/MFsampling'
+homedir='.'
 scriptsdir <- file.path(homedir, "scripts")
 sourceDirectory(scriptsdir, recursive=TRUE, modifiedOnly=FALSE, verbose=TRUE)
 
@@ -27,7 +28,12 @@ sourceDirectory(scriptsdir, recursive=TRUE, modifiedOnly=FALSE, verbose=TRUE)
 # 1. Setup
 
 ```{r}
-m<-function(x){(x + 0.1*x^3 +0.01*x^5)}
+a=1.2;b=5
+m <<- function(x){
+      ifelse(x < -a, 2*C*(x+a)+C*a, 
+             ifelse(x < a, - C*x, 
+                    2*C*(x-a)-C*a))
+    }
 curve(m,from=-5,to=5)
 ```
 
@@ -53,34 +59,31 @@ noise_type <- "homo"  # noiseless, homo, or hetero
 sigma=set_param(noise_type, noise_sigma = noise_sigma)
 set_y_env(noise_type)
 pX_unnorm <- Vectorize(mprime)
-
 N=10^6;r=25
 data1 = IS_sampler(N,r=r, n=150, true_FX = F)
 xLR = data.frame(xL=xL, xR=xR, type="m1")
 m1<-m
 
+noise_sigma=2
 set_x_env(type="normal")
 set_model(type="non_monotone") 
 noise_type <- "homo"  # noiseless, homo, or hetero
-sigma=set_param(noise_type)
+sigma=set_param(noise_type, noise_sigma = noise_sigma)
 set_y_env(noise_type, is_monotone = F)
-pX_unnorm <- build_pX_hat(m, fYtilde, fX, xlim=c(-20,20), normalize=F)
-
-
-N=10^6;r=50
+pX_unnorm <- build_pX_hat(m, fYtilde, fX, xlim=c(-10,10), normalize=F)
+N=10^6;r=25
 data2 = IS_sampler(N,r=r, n=150, true_FX = F)
 xLR = rbind(xLR,data.frame(xL=xL, xR=xR, type="m2"))
 m2<-m
 
-o = fit_plr(data2 %>% mutate(x=x_vec,y=y_vec))
-rbind(data1 %>% mutate(type="known m"), data2 %>% mutate(type="PLR")) %>%
+rbind(data1 %>% mutate(type="m1"), data2 %>% mutate(type="m2")) %>%
   ggplot() + geom_point(aes(x_vec,y_vec)) +
   geom_vline(data= xLR %>% pivot_longer(1:2, values_to = "xLR",names_to = "trType"),aes(xintercept = xLR, color="xL/xR"),linetype='dashed') +
   scale_colour_manual(values=c("red"), labels=c("xL,xR"))+
   labs(color="") +xlab("X")+ylab("Y") + facet_grid(~type)+
   geom_line(data=data.frame(x = seq(mean(xLR$xL),mean(xLR$xR),length.out = 100 ))%>%
-              mutate("known m"=m(x),"PLR"=predict(o, data.frame(x=x))) %>%
-              pivot_longer(c("known m","PLR"), names_to = "type", values_to = "y"), aes(x,y))+
+              mutate("m1"=m1(x),"m2"=m2(x)) %>%
+              pivot_longer(c("m1","m2"), names_to = "type", values_to = "y"), aes(x,y))+
   theme(
     legend.direction="horizontal",
     text=element_text(size=12),
@@ -91,6 +94,7 @@ rbind(data1 %>% mutate(type="known m"), data2 %>% mutate(type="PLR")) %>%
   )
 
 ```
+## Figure 1 m1
 
 ```{r}
 ## Parameters to set
@@ -106,13 +110,82 @@ y_grid = seq(-150,150, length.out=600)
 results = generate_ldens(y_grid,m_idx="p5",noise_type,r=25,n=150, N =10^7, noise_sigma = noise_sigma)
 ```
 
+## Figure 1 m2
+
+```{r}
+## Parameters to set
+noise_sigma=2
+set_x_env(type="normal")
+set_model(type="non_monotone",a=1.2,b=5) 
+noise_type <- "homo"  # noiseless, homo, or hetero
+sigma=set_param(noise_type, noise_sigma = noise_sigma)
+set_y_env(noise_type, is_monotone = F)
+pX_unnorm <- build_pX_hat(m, fYtilde, fX, xlim=c(-10,10), normalize=F)
+y_grid = seq(-50,50, length.out=600)
+results2 = generate_ldens(y_grid,m_idx="PM",noise_type,r=25,n=150, N = 5*10^6, noise_sigma = noise_sigma)
+
+```
+
+### Figure 0 m1m2
+
+```{r}
+set_x_env(type="normal")
+set_model(type="p5") 
+pX_unnorm <- Vectorize(mprime)
+noise_sigma=2
+noise_type <- "homo"  # noiseless, homo, or hetero
+sigma=set_param(noise_type, noise_sigma = noise_sigma)
+set_y_env(noise_type)
+
+m1<-m
+N=10^7;r=25;n=150
+data1 = IS_sampler(N,r=r,n=n, true_FX = F)
+xLR = data.frame(xL=xL, xR=xR, type="known m", m="m1")
+data2 = IS_sampler(N,r=r,n=n, type='plr', true_FX = F)
+xLR = rbind(xLR,data.frame(xL=xL, xR=xR, type="PLR", m="m1"))
+o1 = fit_plr(data2 %>% mutate(x=x_vec,y=y_vec))
+
+noise_sigma=2
+set_x_env(type="normal")
+set_model(type="non_monotone",a=1.2,b=5) 
+noise_type <- "homo"  # noiseless, homo, or hetero
+sigma=set_param(noise_type, noise_sigma = noise_sigma)
+set_y_env(noise_type, is_monotone = F)
+pX_unnorm <- build_pX_hat(m, fYtilde, fX, xlim=c(-10,10), normalize=F)
+m2<-m
+N=10^6;r=25;n=150
+data3 = IS_sampler(N,r=r,n=n, true_FX = F)
+xLR = rbind(xLR,data.frame(xL=xL, xR=xR, type="known m", m="m2"))
+data4 = IS_sampler(N,r=r,n=n, type='plr', true_FX = F)
+xLR = rbind(xLR,data.frame(xL=xL, xR=xR, type="PLR", m="m2"))
+o2 = fit_plr(data4 %>% mutate(x=x_vec,y=y_vec))
+
+p=rbind(data1 %>% mutate(type="known m", m="m1"), data2 %>% mutate(type="PLR", m="m1"),
+      data3 %>% mutate(type="known m", m="m2"), data4 %>% mutate(type="PLR", m="m2")) %>%
+  ggplot() + geom_point(aes(x_vec,y_vec)) +
+  geom_vline(data= xLR %>% pivot_longer(1:2, values_to = "xLR",names_to = "trType"),aes(xintercept = xLR, color="xL/xR"),linetype='dashed') +
+  scale_colour_manual(values=c("red"), labels=c("xL,xR"))+
+  labs(color="") +xlab("X")+ylab("Y") + facet_grid(~m+type)+
+  geom_line(data=rbind(data.frame(x = seq(mean((xLR %>% filter(m=="m1"))$xL),mean((xLR %>% filter(m=="m1"))$xR),length.out = 100 ))%>%
+              mutate("known m"=m1(x),"PLR"=predict(o1, data.frame(x=x)), m="m1"), data.frame(x = seq(mean((xLR %>% filter(m=="m2"))$xL),mean((xLR %>% filter(m=="m2"))$xR),length.out = 100 ))%>%
+              mutate("known m"=m2(x),"PLR"=predict(o2, data.frame(x=x)), m="m2")) %>%
+              pivot_longer(c("known m","PLR"), names_to = "type", values_to = "y"), aes(x,y))+
+  theme(
+    legend.position="None",
+    text=element_text(size=12),
+    legend.title=element_text(size=12),
+    legend.text=element_text(size=12),
+    legend.background = element_rect(fill="transparent"),
+    strip.text.x = element_text(size=12)
+  )
+
+```
 
 
 ```{r}
 ## Parameters to set
-a=3;C=1
 set_x_env(type="normal",x_mean = 5)
-set_model(type="hetero") 
+set_model(type="hetero", a=1,b=2) 
 noise_type <- "hetero"  # noiseless, homo, or hetero
 sigma=set_param(noise_type)
 set_y_env(noise_type)
@@ -135,24 +208,6 @@ y_grid=seq(-3,6,length.out=500)
 results2 = generate_ldens(y_grid,m_idx="heteroZ",noise_type="homo",r=25, n=150, N = 10^7)
 
 ```
-
-
-
-
-```{r}
-## Parameters to set
-noise_sigma=2
-set_x_env(type="normal")
-set_model(type="non_monotone") 
-noise_type <- "homo"  # noiseless, homo, or hetero
-sigma=set_param(noise_type, noise_sigma = noise_sigma)
-set_y_env(noise_type, is_monotone = F)
-pX_unnorm <- build_pX_hat(m, fYtilde, fX, xlim=c(-10,10), normalize=F)
-y_grid = seq(-30,30, length.out=600)
-results2 = generate_ldens(y_grid,m_idx="non_monotone-1",noise_type,r=25,n=150, N = 5*10^6, noise_sigma = noise_sigma)
-
-```
-
 
 
 

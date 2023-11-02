@@ -50,7 +50,7 @@ set_x_env <- function(type='normal', x_mean=0, x_sd=1){
   FX <<- Vectorize(FX)
   
 }
-set_model<-function(type="p3"){
+set_model<-function(type="p3",a=0,b=0){
   if(type == "p3"){
     m <<- function(x){(x+0.1*x^3)}
     mprime <<- function(x){(1+0.3*x^2)}
@@ -59,9 +59,9 @@ set_model<-function(type="p3"){
     }
     Nbreaks<<-5
   }else if(type=="hetero"){
-    m <<- function(x){C*exp(x/a)}
-    mprime <<- function(x){C/a*exp(x/a)}
-    minv <<- function(y){ a*log(y/C) }
+    m <<- function(x){a*exp(x/b)}
+    mprime <<- function(x){a/b*exp(x/b)}
+    minv <<- function(y){ b*log(y/a) }
     Nbreaks<<-10
   }else if(type=="p5"){
     m <<- function(x){(x + 0.2*x^3 +0.02*x^5)}
@@ -72,18 +72,18 @@ set_model<-function(type="p3"){
     minv <<- Vectorize(minv)
     Nbreaks<<-5
   }else if(type=="non_monotone"){
-    x_breaks=c(-10,-1.2,1.2,10)
-    slopes=c(6,-3,6)
+    x_breaks=c(-10,-a,a,10)
+    slopes=b*c(1.5,-1,1.5)
     m <<- function(x){
-      ifelse(x < -1.2, 6*(x+1.2)+3.6, 
-             ifelse(x < 1.2, - 3*x, 
-                    6*(x-1.2)-3.6))
+      ifelse(x < -a, slopes[1]*(x+a)+b*a, 
+             ifelse(x < a, slopes[2]*x, 
+                    slopes[3]*(x-a)-b*a))
     }
     y_breaks=m(x_breaks)
     mprime <<- function(x) {
-      ifelse(x < -1.2, 6, 
-             ifelse(x < 1.2, - 3, 
-                    6))
+      ifelse(x < -a, slopes[1],
+             ifelse(x < a, slopes[2],
+                    slopes[3]))
     }
     minv <<- function(y){
       value = c()

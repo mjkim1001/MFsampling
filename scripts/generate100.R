@@ -5,7 +5,7 @@ library(beepr)
 # We do not fix xL, xR here. effectively sample n points.
 # Threshold returns r-th order statistic of sampled Y's
 generate_ldens <- function(y_grid,m_idx=1,noise_type,r=50, n=150, N = 10^6, noise_sigma=1){
-  ncores= 4
+  ncores= 5
   registerDoParallel(cores=ncores)
   hetero=(noise_type=="hetero")
   combine_list <-function(x, ...){
@@ -23,7 +23,7 @@ generate_ldens <- function(y_grid,m_idx=1,noise_type,r=50, n=150, N = 10^6, nois
   # IS modified via GPD
   # KDE using random n
   # IS using predicted mean
-  results <- foreach( i = 1:100, .combine = combine_list,.errorhandling = "remove") %dopar% {
+  results <- foreach( i = 1:5, .combine = combine_list,.errorhandling = "remove") %dopar% {
     set.seed(i)
     trhold <- NULL
     df <- NULL
@@ -58,6 +58,7 @@ generate_ldens <- function(y_grid,m_idx=1,noise_type,r=50, n=150, N = 10^6, nois
     }
     return(list(dataUsed=dataUsed, df=df, trhold=trhold))
   }
+  beep()
   results$df = rbind(df0, results$df)
   saveRDS(results,  paste(homedir,sprintf("figures/m%sN%d_%s_noise%d.rds", m_idx,ifelse(log10(N) %% 1,N,log10(N)),noise_type,noise_sigma) ,sep="/") )
   save_png(results, y_grid, m_idx=m_idx, noise_type=noise_type, r=r,N=N, noise_sigma=noise_sigma)
