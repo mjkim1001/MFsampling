@@ -4,8 +4,9 @@ library(beepr)
 # This function is for generate_ldens for Figure 1
 # We do not fix xL, xR here. effectively sample n points.
 # Threshold returns r-th order statistic of sampled Y's
-generate_ldens <- function(y_grid,m_idx=1,noise_type,r=50, n=150, N = 10^6, noise_sigma=1,plr=TRUE){
-  ncores= 4
+
+generate_ldens <- function(y_grid,m_idx=1,noise_type,r=50, n=150, N = 10^6, noise_sigma=1, plr=F){
+  ncores= 5
   registerDoParallel(cores=ncores)
   hetero=(noise_type=="hetero")
   combine_list <-function(x, ...){
@@ -43,7 +44,7 @@ generate_ldens <- function(y_grid,m_idx=1,noise_type,r=50, n=150, N = 10^6, nois
     dataUsed = rbind(dataUsed, data %>% mutate(proposal="uniform", itr=i, N0=N, r=r))
     df = rbind(df,generate_dens(data,"uniform", y_grid, h0=h, N0=N, itr=i, rr= r, r=r, hetero=hetero))
     trhold = rbind(trhold, threshold_IS(data, N0=N,itr=i, rr= r) %>% mutate(proposal="uniform"))
-    data = IS_sampler(N, r=r, n=n , type="random", data = dataAll, true_FX = FALSE)
+    data = IS_sampler(N, r=r, n=n, type="random", data = dataAll, true_FX = FALSE)
     dataUsed = rbind(dataUsed, data %>% mutate(proposal="random", itr=i, N0=N, r=r))
     df = rbind(df,generate_dens(data,"random", y_grid, h0=h, N0=N, itr=i, rr= r, r=r, hetero=hetero))
     trhold = rbind(trhold, threshold_IS(data, N0=N,itr=i, rr= r) %>% mutate(proposal="random"))
@@ -144,82 +145,3 @@ save_png <-function(results, y_grid, plotType = c("random","uniform","optimal","
   }
 }
 
-generate_vars <- function(y_grid,m_idx=1,noise_type,r=50, n=150, N = 10^6, noise_sigma=1){
-  ncores= 4
-  registerDoParallel(cores=ncores)
-  hetero=(noise_type=="hetero")
-  combine_list <-function(x, ...){
-    mapply(rbind, x, ..., SIMPLIFY = F)
-  }
-  
-  data = IS_sampler(N, r ,n=n,type="optimal", true_FX = FALSE) 
-  results <- foreach( i = 1:10, .combine = combine_list,.errorhandling = "remove") %dopar% {
-    set.seed(i)
-    trhold <- NULL
-    df <- NULL
-    dataUsed<-NULL
-    x_left = sample_tail_x(N, r, xL, is_left=TRUE)
-    x_right = sample_tail_x(N, r, xR, is_left=FALSE)
-    
-    data = IS_sampler(N, r ,n=n,type="optimal", x_left=x_left,x_right=x_right, true_FX = FALSE) 
-    dataUsed = rbind(dataUsed, data %>% mutate(proposal="optimal", itr=i, N0=N, r=r))
-    df = rbind(df,generate_dens(data,"optimal", y_grid, h0=h, N0=N, itr=i, rr= r, r=r, hetero=hetero))
-    trhold = rbind(trhold, threshold_IS(data, N0=N,itr=i, rr= r) %>% mutate(proposal="optimal"))
-    df = rbind(df,generate_dens(data,"modified", y_grid, h0=h, N0=N, itr=i, rr= r, r=r, hetero=hetero))
-    trhold = rbind(trhold, threshold_IS(data, N0=N,itr=i, rr= r) %>% mutate(proposal="modified"))
-    
-    data = IS_sampler(N, r=r, n=n, type="uniform", x_left=x_left,x_right=x_right, true_FX = FALSE)
-    dataUsed = rbind(dataUsed, data %>% mutate(proposal="uniform", itr=i, N0=N, r=r))
-    df = rbind(df,generate_dens(data,"uniform", y_grid, h0=h, N0=N, itr=i, rr= r, r=r, hetero=hetero))
-    trhold = rbind(trhold, threshold_IS(data, N0=N,itr=i, rr= r) %>% mutate(proposal="uniform"))
-    data = IS_sampler(N, r=r,n=n, type="random", true_FX = FALSE)
-    dataUsed = rbind(dataUsed, data %>% mutate(proposal="random", itr=i, N0=N, r=r))
-    df = rbind(df,generate_dens(data,"random", y_grid, h0=h, N0=N, itr=i, rr= r, r=r, hetero=hetero))
-    trhold = rbind(trhold, threshold_IS(data, N0=N,itr=i, rr= r) %>% mutate(proposal="random"))
-    
-    return(list(dataUsed=dataUsed, df=df, trhold=trhold))
-  }
-  saveRDS(results,  paste(homedir,sprintf("figures/Varm%sN%d_%s_noise%d.rds", m_idx,ifelse(log10(N) %% 1,N,log10(N)),noise_type,noise_sigma) ,sep="/") )
-  save_png(results, y_grid,  m_idx=m_idx, noise_type=noise_type, r=r,N=N, noise_sigma=1, figure=2)
-  return(results)
-}
-
-
-generate_unif <- function(y_grid,m_idx=1,noise_type,r=50, n=150, N = 10^6, noise_sigma=1){
-  ncores= 4
-  registerDoParallel(cores=ncores)
-  hetero=(noise_type=="hetero")
-  combine_list <-function(x, ...){
-    mapply(rbind, x, ..., SIMPLIFY = F)
-  }
-
-  
-  df0 = generate_dens(data=NULL,"true", y_grid, N0=N, r=r)
-  
-  results <- foreach( i = 1:10, .combine = combine_list,.errorhandling = "remove") %dopar% {
-    set.seed(i)
-    trhold <- NULL
-    df <- NULL
-    dataUsed<-NULL
-    # Obtain all N Y values.
-    data = IS_sampler(N, r ,n=n,type="optimal", true_FX = FALSE) 
-    dataUsed = rbind(dataUsed, data %>% mutate(proposal="optimal", itr=i, N0=N, r=r))
-    df = rbind(df,generate_dens(data,"optimal", y_grid, h0=h, N0=N, itr=i, rr= r, r=r, hetero=hetero))
-    trhold = rbind(trhold, threshold_IS(data, N0=N,itr=i, rr= r) %>% mutate(proposal="optimal"))
-    df = rbind(df,generate_dens(data,"modified", y_grid, h0=h, N0=N, itr=i, rr= r, r=r, hetero=hetero))
-    trhold = rbind(trhold, threshold_IS(data, N0=N,itr=i, rr= r) %>% mutate(proposal="modified"))
-    
-    data = IS_sampler(N, r=r, n=n, type="uniform", true_FX = FALSE)
-    dataUsed = rbind(dataUsed, data %>% mutate(proposal="uniform", itr=i, N0=N, r=r))
-    df = rbind(df,generate_dens(data,"uniform", y_grid, h0=h, N0=N, itr=i, rr= r, r=r, hetero=hetero))
-    trhold = rbind(trhold, threshold_IS(data, N0=N,itr=i, rr= r) %>% mutate(proposal="uniform"))
-    if(hetero){
-      trhold = trhold %>% mutate(yL = exp(yL), yR = exp(yR))
-    }
-    return(list(dataUsed=dataUsed, df=df, trhold=trhold))
-  }
-  results$df = rbind(df0, results$df)
-  saveRDS(results, sprintf("~/R/PCNN/PCNN/Unifm%sr%dN%d_%s_noise%d.rds", m_idx,r, ifelse(log10(N) %% 1,N,log10(N)), noise_type,noise_sigma) )
-  save_png(results, y_grid, m_idx=m_idx, noise_type=noise_type, r=r,N=N, noise_sigma=noise_sigma)
-  return(results)
-}

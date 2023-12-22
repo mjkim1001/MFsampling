@@ -31,6 +31,7 @@ IS_sampler <-function(N,r,n, type="optimal", true_FX=TRUE, data=NULL,x_left=NULL
     PL = FX(xL);  PR = 1-FX(xR) 
   }else{
     PL = FXhat(xL);  PR = 1-FXhat(xR) 
+    #If x_left is used, then FXhat should have been defined before.
   }
   
   if(grepl("plr", type)){
@@ -63,38 +64,34 @@ IS_sampler <-function(N,r,n, type="optimal", true_FX=TRUE, data=NULL,x_left=NULL
 threshold_IS <-function(data, itr=0, N0=N, rr=NULL){
   #When m is monotone
   #If rr is not given, return xL and xR based on the label.
-  #If rr is given, then retrun yL and yR based on the rrth orderstatistic of Y.
+  #If rr is given, then retrun yL and yR based on the (rr)th orderstatistic of Y.
   if(is.null(rr)){
     rL=which(data$x_vec == max((data%>%filter(label=="L"))$x_vec))
     rR=which(data$x_vec == min((data%>%filter(label=="R"))$x_vec))
     return(data.frame(xL=data$x_vec[rL], xR=data$x_vec[rR], yL=data$y_vec[rL], yR=data$y_vec[rR], ymin=min(data$y_vec), ymax=max(data$y_vec) , iteration=itr, N=N0))
   }else{
     data = data %>% arrange(y_vec)
-    rL = rr
-    rR = nrow(data)- rr +1
-    return(data.frame(xL=data$x_vec[rL], xR=data$x_vec[rR], yL=data$y_vec[rL], yR=data$y_vec[rR], ymin=min(data$y_vec), ymax=max(data$y_vec) , iteration=itr, N=N0, rr=rr))
+    if(length(rr)>1){
+      rL = rr[1];rR=nrow(data)- rr[2] +1
+    }else{
+      rL = rr
+      rR = nrow(data)- rr +1
+    }
+    return(data.frame(xL=data$x_vec[rL], xR=data$x_vec[rR], yL=data$y_vec[rL], yR=data$y_vec[rR], ymin=min(data$y_vec), ymax=max(data$y_vec) , iteration=itr, N=N0, rr=rL))
   }
 }
 
-Fbar_generator<-function(data, r, top=T){
-  x_vec = data$x_vec; y_vec = data$y_vec
-  n = nrow(data)
-  xL = x_vec[r]; xR = x_vec[n-r+1]
-  PL = FXhat(xL);PR = 1-FXhat(xR)
+Fbar_generator<-function(data, top=T,d=1){
+  # return `Fbar` function which returns empirical estimate of P(Y>u)
+  y_vec = data$y_vec
+
   Fbar<-function(u){
-    if(top){
-      range = ((n-r+1):n)
-    }else{
-      range = (1:r)
-    }
-    PP <-ifelse(top,PR,PL)
+    weights=data$weights*(nrow(data))/sum(data$weights)
     if(!top){ y_vec = -y_vec; u = -u }
-    return((xR-xL) * mean(((y_vec[(r+1):(n-r)])>u) * fX((x_vec[(r+1):(n-r)]))) * (1-PR-PL) +
-             PP * mean((y_vec[range])>u))
+    return( mean((y_vec>u) *(weights)^d) )
   }
   return(Fbar)
 }
-
 
 
 generate_grid <- function(data,h_support=NULL){
@@ -103,7 +100,6 @@ generate_grid <- function(data,h_support=NULL){
   }
   return(seq( min(data$y_vec)-h_support*3.75*noise_sigma, max(data$y_vec)+h_support*3.75*noise_sigma, length.out=500))
 }
-
 
 generate_dens<-function(data, proposal, grid=NULL, h0=h, itr=0, N0=N, rr=50, r=50,hetero=F){
   if(is.null(grid)){
@@ -124,46 +120,27 @@ generate_dens<-function(data, proposal, grid=NULL, h0=h, itr=0, N0=N, rr=50, r=5
     #  data$y = exp(data$y)
     #}
     
-    gpd_param <<- NULL
     y_sort = sort(data$y_vec)
-    # for( rrr in (rr):(rr)){
-    #   n=nrow(data)
-    #   yL =y_sort[rrr]; yR=y_sort[n-rrr+1]
-    #   fit.gpd_R = fgpd.weight(data$y_vec, weight=data$weights, u = yR)
-    #   fit.gpd_L = fgpd.weight(-data$y_vec, weight=data$weights, u = -yL)
-    #   
-    #   gpd_param = rbind(gpd_param, data.frame(yL = yL, yR=yR, xiL =fit.gpd_L$xi, xiR = fit.gpd_R$xi, sigmaL = fit.gpd_L$sigmau, sigmaR = fit.gpd_R$sigmau, rr = rrr ))
-    # }
     n = nrow(data)
-    yL =y_sort[rr]; yR=y_sort[n-rr+1]
+    
+    if(length(rr)>1){
+      rl=rr[1];rr=rr[2]
+      yL =y_sort[rl]; yR=y_sort[n-rr+1]
+    }else{
+      yL =y_sort[rr]; yR=y_sort[n-rr+1]
+    }
     fit.gpd_R = fgpd.weight(data$y_vec, weight=data$weights, u = yR)
     fit.gpd_L = fgpd.weight(-data$y_vec, weight=data$weights, u = -yL)
-
+    
     gpd_param = data.frame(yL = yL, yR=yR, xiL =fit.gpd_L$xi, xiR = fit.gpd_R$xi, sigmaL = fit.gpd_L$sigmau, sigmaR = fit.gpd_R$sigmau, rr = rr )
     
-    FbarL = (Fbar_generator(data,r,top=F))(yL)
-    FbarR = (Fbar_generator(data,r,top=T))(yR)
+    FbarL = (Fbar_generator(data,top=F))(yL)
+    FbarR = (Fbar_generator(data,top=T))(yR)
     xiL = fit.gpd_L$xi; xiR = fit.gpd_R$xi
     sigmaL = fit.gpd_L$sigmau; sigmaR = fit.gpd_R$sigmau
-    #sigmaL = median(gpd_param$sigmaL)
-    #sigmaR = median(gpd_param$sigmaR)
-    #xiL = median(gpd_param$xiL);xiR = median(gpd_param$xiR)
-    #cL = predict(model, x=yL-0.01)/evmix::dgpd(-yL+0.01,u=-yL, xi = xiL, sigmau = sigmaL, phiu=FbarL)
-    #cR = predict(model, x=yR+0.01)/evmix::dgpd(yR+0.01,u=yR, xi = xiR, sigmau = sigmaR, phiu=FbarR)
+    
     cL=cR=1
-    # dens = sapply(y_grid, function(x){
-    #   if(x <= yL){ 
-    #     return(evmix::dgpd(-x,u=-yL, xi = xiL,  sigmau = sigmaL , phiu=FbarL)*cL)
-    #   }else if(x > yR){
-    #     return(evmix::dgpd(x,u=yR, xi = xiR,  sigmau = sigmaR, phiu=FbarR)*cR)
-    #   } else{
-    #     if(hetero){
-    #       return(beta_prime(x)*predict(model, x=b(x)))
-    #     }else{
-    #       return(predict(model, x=x))
-    #     }
-    #   }
-    # })
+    
     if(hetero){
       dens =beta_prime(y_grid) * sapply(trans(y_grid), function(x){
         if(x <= yL){ 

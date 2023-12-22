@@ -173,7 +173,7 @@ set_model<-function(type="p3",a=0,b=0){
     minv <<- function(y){
       return(y/a)
     }
-    Nbreaks<<-a
+    Nbreaks<<-4
   }
   m<<-Vectorize(m)
   mprime <<-Vectorize(mprime)
@@ -248,6 +248,7 @@ set_y_env <- function(noise_type, is_monotone=TRUE, ytlim=NULL, a=0,b=0){
     }
     fY <<- function(y){
       func <- function(z){fYtilde(y-z)*dnorm(z, mean=0, sd=noise_sigma)}
+      #return(normalize(func, c(-5*noise_sigma, 5*noise_sigma)))
       return(integrate(func, lower=-5*noise_sigma, upper=5*noise_sigma)$value)
     }
     
@@ -276,13 +277,11 @@ set_y_env <- function(noise_type, is_monotone=TRUE, ytlim=NULL, a=0,b=0){
 
 sample_tail_x <- function(N, r, xL, is_left=T){
   x_vec <- sample_x(N)
-  # 원하는 조건을 만족하는 샘플을 필터링합니다.
   if(is_left) {
     x_vec <- x_vec[x_vec <= xL]
   } else {
     x_vec <- x_vec[x_vec >= xL]
   }
-  # 필요한 만큼의 샘플을 얻을 때까지 반복합니다.
   while(length(x_vec) < r) {
     additional_samples <- sample_x(as.integer(N * (r-length(x_vec))/length(x_vec)))
     
