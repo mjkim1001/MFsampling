@@ -13,9 +13,8 @@ plrSampler <- function(n0, n, xlim,Nbreaks=5){
   }
   return(data.frame(x=new_x,w=new_w,y=new_y))
 }
-IS_sampler <-function(N,r, type="optimal", n=0, true_FX=TRUE, data=NULL,x_left=NULL,x_right=NULL){
-  if(n==0){n=3*r; w=1}else{ 
-    w = (n-2*r)/r }
+IS_sampler <-function(N,r,n, type="optimal", true_FX=TRUE, data=NULL,x_left=NULL,x_right=NULL){
+  w = (n-2*r)/r 
   if(is.null(x_left)){
     if(!is.null(data)){
       data = data %>% arrange(x_vec)
@@ -35,7 +34,7 @@ IS_sampler <-function(N,r, type="optimal", n=0, true_FX=TRUE, data=NULL,x_left=N
   }
   
   if(grepl("plr", type)){
-    sampled = plrSampler(n0=10, n= n-2*r, xlim= c(xL,xR))
+    sampled = plrSampler(n0=15, n= n-2*r, xlim= c(xL,xR))
     x_vec = c(x_left,sampled$x, x_right)
     weights = c(rep(w*PL,r),sampled$w,rep(w*PR,r))
     y_vec = c(sample_y(x_left), sampled$y, sample_y(x_right))
@@ -78,10 +77,10 @@ threshold_IS <-function(data, itr=0, N0=N, rr=NULL){
 }
 
 Fbar_generator<-function(data, r, top=T){
-  x_vec = data$x; y_vec = data$y
+  x_vec = data$x_vec; y_vec = data$y_vec
   n = nrow(data)
   xL = x_vec[r]; xR = x_vec[n-r+1]
-  PL = FX(xL);PR = 1-FX(xR)
+  PL = FXhat(xL);PR = 1-FXhat(xR)
   Fbar<-function(u){
     if(top){
       range = ((n-r+1):n)
@@ -126,25 +125,31 @@ generate_dens<-function(data, proposal, grid=NULL, h0=h, itr=0, N0=N, rr=50, r=5
     #}
     
     gpd_param <<- NULL
-    y_sort = sort(data$y)
-    for( rrr in (rr-5):(rr+5)){
-      n=nrow(data)
-      yL =y_sort[rrr]; yR=y_sort[n-rrr+1]
-      fit.gpd_R = fgpd.weight(data$y, weight=data$w, u = yR)
-      fit.gpd_L = fgpd.weight(-data$y, weight=data$w, u = -yL)
-      
-      gpd_param = rbind(gpd_param, data.frame(yL = yL, yR=yR, xiL =fit.gpd_L$xi, xiR = fit.gpd_R$xi, sigmaL = fit.gpd_L$sigmau, sigmaR = fit.gpd_R$sigmau, rr = rrr ))
-    }
-    
+    y_sort = sort(data$y_vec)
+    # for( rrr in (rr):(rr)){
+    #   n=nrow(data)
+    #   yL =y_sort[rrr]; yR=y_sort[n-rrr+1]
+    #   fit.gpd_R = fgpd.weight(data$y_vec, weight=data$weights, u = yR)
+    #   fit.gpd_L = fgpd.weight(-data$y_vec, weight=data$weights, u = -yL)
+    #   
+    #   gpd_param = rbind(gpd_param, data.frame(yL = yL, yR=yR, xiL =fit.gpd_L$xi, xiR = fit.gpd_R$xi, sigmaL = fit.gpd_L$sigmau, sigmaR = fit.gpd_R$sigmau, rr = rrr ))
+    # }
+    n = nrow(data)
     yL =y_sort[rr]; yR=y_sort[n-rr+1]
+    fit.gpd_R = fgpd.weight(data$y_vec, weight=data$weights, u = yR)
+    fit.gpd_L = fgpd.weight(-data$y_vec, weight=data$weights, u = -yL)
+
+    gpd_param = data.frame(yL = yL, yR=yR, xiL =fit.gpd_L$xi, xiR = fit.gpd_R$xi, sigmaL = fit.gpd_L$sigmau, sigmaR = fit.gpd_R$sigmau, rr = rr )
     
     FbarL = (Fbar_generator(data,r,top=F))(yL)
     FbarR = (Fbar_generator(data,r,top=T))(yR)
-    sigmaL = median(gpd_param$sigmaL)
-    sigmaR = median(gpd_param$sigmaR)
-    xiL = median(gpd_param$xiL);xiR = median(gpd_param$xiR)
-    cL = predict(model, x=yL-0.01)/evmix::dgpd(-yL+0.01,u=-yL, xi = xiL, sigmau = sigmaL, phiu=FbarL)
-    cR = predict(model, x=yR+0.01)/evmix::dgpd(yR+0.01,u=yR, xi = xiR, sigmau = sigmaR, phiu=FbarR)
+    xiL = fit.gpd_L$xi; xiR = fit.gpd_R$xi
+    sigmaL = fit.gpd_L$sigmau; sigmaR = fit.gpd_R$sigmau
+    #sigmaL = median(gpd_param$sigmaL)
+    #sigmaR = median(gpd_param$sigmaR)
+    #xiL = median(gpd_param$xiL);xiR = median(gpd_param$xiR)
+    #cL = predict(model, x=yL-0.01)/evmix::dgpd(-yL+0.01,u=-yL, xi = xiL, sigmau = sigmaL, phiu=FbarL)
+    #cR = predict(model, x=yR+0.01)/evmix::dgpd(yR+0.01,u=yR, xi = xiR, sigmau = sigmaR, phiu=FbarR)
     cL=cR=1
     # dens = sapply(y_grid, function(x){
     #   if(x <= yL){ 

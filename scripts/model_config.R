@@ -9,11 +9,46 @@ set_x_env <- function(type='normal', x_mean=0, x_sd=1){
     }
     # Density functions
     fX <<- function(x){
-      # Truncated normal distribution
       dnorm(x,x_mean,x_sd)
     }
     FX <<- function(x){
       pnorm(x,x_mean,x_sd)
+    }
+  }else if(type=="heavyTail"){
+    h<<- 0.5
+    a=4
+    # Density functions
+    const = 1/(sqrt(2*pi)*(pnorm(a)-pnorm(-a))+4*exp(-a^2/2))
+    fX <<- function(x){
+      if(x < -a){
+        return(const*exp(1/2*(x-a^2+a)))
+      }else if (x<a){
+        return(const*exp(-1/2*x^2))
+      }else{
+        return(const*exp(-1/2*(x+a^2-a)))
+      }
+    }
+    FX <<- function(x){
+      if(x < -a){
+        return(2*const*exp(1/2*(x-a^2+a)))
+      }else if (x<a){
+        return(2*const*exp(-a^2/2) + const*sqrt(2*pi)*(pnorm(x)-pnorm(-a)))
+      }else{
+        return(sqrt(2*pi)*const*(pnorm(a)-pnorm(-a))+2*const*exp(-a^2/2)+ 2*const*(exp(-a^2/2)-exp(-1/2*(x+a^2-a))))
+      }
+    }
+    FinvX <<- function(y){
+      if(y < FX(-a)){
+        return(2*log(y/(2*const))+a^2-a)
+      }else if (y<FX(a)){
+        return(qnorm((y- 2*const*exp(-a^2/2))/( const*sqrt(2*pi))+pnorm(-a)))
+      }else{
+        return(-2*log(exp(-a^2/2)-(y-sqrt(2*pi)*const*(pnorm(a)-pnorm(-a))-2*const*exp(-a^2/2))/(2*const))-a^2+a)
+      }
+    }
+    sample_x <<- function(n){
+      x_vec <- sapply(runif(n),function(y)FinvX(y))
+      return(x_vec)
     }
   }else if(type=="exp"){
     h<<- 1
@@ -23,26 +58,10 @@ set_x_env <- function(type='normal', x_mean=0, x_sd=1){
     }
     # Density functions
     fX <<- function(x){
-      # Truncated normal distribution
       dexp(x,1)
     }
     FX <<- function(x){
       pexp(x,1)
-    }
-  }
-  else if(type=="weibull"){
-    h<<- 4
-    sample_x <<- function(n){
-      x_vec <- rweibull(n,shape=1/2)
-      return(x_vec)
-    }
-    # Density functions
-    fX <<- function(x){
-      # Truncated normal distribution
-      dweibull(x,shape=1/2)
-    }
-    FX <<- function(x){
-      pweibull(x,shape=1/2)
     }
   }
   
@@ -52,20 +71,59 @@ set_x_env <- function(type='normal', x_mean=0, x_sd=1){
 }
 set_model<-function(type="p3",a=0,b=0){
   if(type == "p3"){
-    m <<- function(x){(x+0.1*x^3)}
-    mprime <<- function(x){(1+0.3*x^2)}
+    m <<- function(x){a*(x+0.1*x^3)}
+    mprime <<- function(x){a*(1+0.3*x^2)}
     minv <<- function(y){
-      uniroot(function(x){m(x)-y}, c(-20,20))[['root']]
+      uniroot(function(x){m(x)-y}, c(-50,50))[['root']]
     }
     Nbreaks<<-5
+  }else if(type=="p2"){
+    m <<- function(x){
+      ifelse(x<0,a*(-x^2+2*x), a*(x^2+2*x))
+    }
+    mprime <<- function(x){
+      ifelse(x<0,a*(-2*x+2), a*(2*x+2))
+    }
+    minv <<- function(y){
+      ifelse(y<0, (1-sqrt(1-y/a)), (-1+sqrt(1+y/a)) )
+    }
+    minv <<- Vectorize(minv)
+    Nbreaks<<-8
+  }else if(type=="pp2"){
+    m <<- function(x){
+      if(x < -2){
+        return(a*(-x^2-4))
+      }else if(x<2){
+        return(4*a*x)
+      }
+      return(a*(x^2+4))
+    }
+    mprime <<- function(x){
+      if(x < -2){
+        return(a*(-2*x))
+      }else if(x<2){
+        return(4*a)
+      }
+      return(a*(2*x))
+    }
+    minv <<- function(y){
+      if(y < -8*a){
+        return(-sqrt(-4-y/a))
+      }else if(y<8*a){
+        return(y/(4*a))
+      }
+      return(sqrt(y/a-4))
+    }
+    minv <<- Vectorize(minv)
+    Nbreaks<<- 5
   }else if(type=="hetero"){
     m <<- function(x){a*exp(x/b)}
     mprime <<- function(x){a/b*exp(x/b)}
     minv <<- function(y){ b*log(y/a) }
     Nbreaks<<-10
   }else if(type=="p5"){
-    m <<- function(x){(x + 0.2*x^3 +0.02*x^5)}
-    mprime <<- function(x){(1+0.6*x^2 +0.1*x^4)}
+    m <<- function(x){a*(2*x + 0.8*x^3 +0.32*x^5)}
+    mprime <<- function(x){a*(2+2.4*x^2 +1.6*x^4)}
     minv <<- function(y){
       uniroot(function(x){m(x)-y}, c(-20,20))[['root']]
     }
@@ -73,7 +131,7 @@ set_model<-function(type="p3",a=0,b=0){
     Nbreaks<<-5
   }else if(type=="non_monotone"){
     x_breaks=c(-10,-a,a,10)
-    slopes=b*c(1.5,-1,1.5)
+    slopes=b*c(1.8,-1,1.8)
     m <<- function(x){
       ifelse(x < -a, slopes[1]*(x+a)+b*a, 
              ifelse(x < a, slopes[2]*x, 
@@ -105,6 +163,17 @@ set_model<-function(type="p3",a=0,b=0){
       return(c(-1,1)*sqrt(-C^2*log(y/a)))
     }
     Nbreaks<<-10
+  }else if(type=="p1"){
+    m <<- function(x){
+      a*x
+    }
+    mprime <<- function(x) {
+      a
+    }
+    minv <<- function(y){
+      return(y/a)
+    }
+    Nbreaks<<-a
   }
   m<<-Vectorize(m)
   mprime <<-Vectorize(mprime)
@@ -116,11 +185,11 @@ set_param <- function(noise_type, noise_sigma=1){
   } else if (noise_type == "homo"){
     sigma <- function(x){1}
     noise_sigma <<- noise_sigma
-    h<<- h + noise_sigma/2
+    h<<- 6*h
   }else if (noise_type == "hetero"){
     print("set_param should come after set_model")
     sigma <- function(x){abs(m(x))}
-    h <<- 3*h
+    h <<- 6*h
     noise_sigma <<- 1/6
   }
   return(sigma)}
