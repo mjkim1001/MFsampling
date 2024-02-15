@@ -17,9 +17,10 @@ library(segmented)
 library(rootSolve)
 library(gridExtra)
 library(cowplot)
+library(ggpubr)
 library(evmix)
-homedir='~/R/MFsampling'
-#homedir='.'
+#homedir='~/R/MFsampling'
+homedir='.'
 scriptsdir <- file.path(homedir, "scripts")
 sourceDirectory(scriptsdir, recursive=TRUE, modifiedOnly=FALSE, verbose=TRUE)
 
@@ -153,11 +154,9 @@ set_y_env(noise_type, is_monotone = F)
 pX_unnorm <- build_pX_hat(m, fYtilde, fX, xlim=c(-10,10), normalize=F)
 m2<-m
 N=10^6;r=25;n=150
-#data3 = IS_sampler(N,r=r,n=n, true_FX = F)
-data3=data1
+data3 = IS_sampler(N,r=r,n=n, true_FX = F)
 xLR = rbind(xLR,data.frame(xL=xL, xR=xR, type="known m", m="m2"))
-data4=data2
-#data4 = IS_sampler(N,r=r,n=n, type='plr', true_FX = F)
+data4 = IS_sampler(N,r=r,n=n, type='plr', true_FX = F)
 xLR = rbind(xLR,data.frame(xL=xL, xR=xR, type="PLR", m="m2"))
 o2 = fit_plr(data4 %>% mutate(x=x_vec,y=y_vec))
 
@@ -295,4 +294,63 @@ p=rbind(data1 %>% mutate(type="known m", m="m3 - Y"), data2 %>% mutate(type="PLR
 ggsave(filename=sprintf("./final/f0m3%s.png",fig), plot=p, width=853/(96*2), height=278/96, dpi=96)
 ```
 
+### Figures for poster
 
+```{r}
+set_x_env(type="heavyTail")
+set_model(type="p1",a=3) 
+pX_unnorm <- Vectorize(mprime) 
+noise_sigma=6
+noise_type <- "homo"  # noiseless, homo, or hetero
+sigma=set_param(noise_type, noise_sigma = noise_sigma)
+set_y_env(noise_type)
+
+N=10^6;r=25;n=150
+dataAll = XY_sampler(N)
+data1 = IS_sampler(N, r=r ,n=n,type="optimal", data=dataAll, true_FX = FALSE) 
+xLR = data.frame(xL=xL, xR=xR, type="known m", m="m1")
+
+p=ggscatterhist(
+  rbind(dataAll %>% 
+        arrange(x_vec) %>% 
+        mutate(type = rep(c("sampled","true","sampled"), c(r, N-2*r, r))),
+      data3 %>% filter(label=="0") %>% mutate(type="sampled") %>%
+        dplyr::select(-label)) %>% mutate(X=x_vec, Y=exp(y_vec)) %>%
+    dplyr::select(-c(x_vec,y_vec)), x = "X", y = "Y",
+  color = "type",
+  palette = c( "black","skyblue"),
+  margin.params = list(fill = "type", color = "black", size = 0.2),
+  ggtheme = theme_grey()
+  )
+p$sp = p$sp + geom_vline(xintercept = c(xL,xR), linetype = "dashed", color = "red")+theme(legend.position = "none",plot.caption = element_text(size = 18, hjust = 0.5)) + labs(caption = "(m3) heteroscedastic")
+p;ggsave(filename="scatterplot3.png", width=6, height = 5)
+
+```
+
+
+```{r}
+noise_sigma=6
+set_x_env(type="normal")
+set_model(type="non_monotone",a=1.2,b=10) 
+noise_type <- "homo"  # noiseless, homo, or hetero
+sigma=set_param(noise_type, noise_sigma = noise_sigma)
+set_y_env(noise_type, is_monotone = F)
+pX_unnorm <- build_pX_hat(m, fYtilde, fX, xlim=c(-10,10), normalize=F)
+N=10^6;r=25;n=150
+dataAll = XY_sampler(N)
+data1 = IS_sampler(N, r=r ,n=n,type="optimal", data=dataAll, true_FX = FALSE) 
+
+
+set_x_env(type="normal",x_mean = 5)
+set_model(type="hetero", a=1,b=2) 
+noise_type <- "hetero"  # noiseless, homo, or hetero
+sigma=set_param(noise_type)
+set_y_env(noise_type, a=1,b=2)
+sample_y = sample_z
+mprime <- mtilde_prime
+pX_unnorm <- mtilde_prime
+N=10^6;r=25;n=150
+dataAll = XY_sampler(N)
+data3 = IS_sampler(N,r=r,n=n, true_FX = F)
+
+```
