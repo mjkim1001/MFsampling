@@ -6,10 +6,12 @@ by Minji Kim, Vladas Pipiras, Kevin O'Connor, and Themistoklis Sapsis, Feb 2024.
 
 The repository includes the following files:
 
-* ``scripts`` : A directory containing the primary code for multi-fidelity importance sampling.
+* ``scripts`` : This directory is the core of our project, containing the main scripts for implementing multi-fidelity importance sampling techniques.
 
-* ``simulation.Rmd`` : This file handles data generation and the creation of figures for numerical simulations.
+* ``figs_intro.R`` : This script is to create the introductory figures.
 
-* ``figs_intro.R`` : Contains the code necessary for generating introductory figures.
+* ``simulation.Rmd`` : An R Markdown document that outlines the process of data generation and the steps involved in our numerical simulations.
 
-* ``ship.Rmd`` : Used for data analysis and producing figures applicable to the ship motion program.
+* ``Figure_final.R`` : A script designed to generate the final set of figures showcasing the results of our numerical simulations.
+
+* ``ship.Rmd`` : An R Markdown document focused on the application of our multi-fidelity importance sampling method to analyze ship motion program data.
