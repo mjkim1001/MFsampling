@@ -1,16 +1,4 @@
 
-h=0.25
-df = NULL
-for(i in 1:100){
-  data = as_tibble(results$dataUsed) %>% filter(proposal=="optimal" & itr==i) %>% dplyr::select(x_vec,weights,y_vec)
-  df= rbind(df,generate_dens(data,"optimal", y_grid, h0=h, N0=10^6, itr=i, rr= r, r=r, hetero=F))
-}
-results$df = rbind(results$df %>% filter(proposal != "optimal"), df)
-
-df = rbind(df,generate_dens(data,"modified", y_grid, h0=h, N0=N, itr=i, rr= r, r=r, hetero=hetero))
-table((as_tibble(results$dataUsed) %>% filter(proposal=="optimal"))$N0)
-i=1
-(as_tibble(results$dataUsed))%>% filter(itr==i & proposal=="uniform")
 
 save_figure <-function(results, plotType = c("random","uniform","optimal","modified", "plr","plr-modified","total"),m_idx, noise_type, N0=NULL,r=0,noise_sigma=0){
   results$trhold = results$trhold %>% 
@@ -255,16 +243,18 @@ fname = sprintf("./MFsampling/final2/f2UnifM%d.png",f)
 ggsave(filename = fname, plot = p, width = 10, height = ifelse(f==1,2.9,2.5))
 
 ## Figure for poster
-results <- readRDS(paste(homedir,"MFsampling/final2/mp1N6000000_homo_noise6.rds",sep = '/'))
+results <- readRDS(paste(homedir,"MFsampling/figures/mp1N6000000_homo_noise6.rds",sep = '/'))
+results2 <- readRDS(paste(homedir,"MFsampling/final2/mPMN6_homo_noise6.rds",sep = '/'))
+results <- readRDS(paste(homedir,"MFsampling/figures/mheteroN6_hetero_noise1.rds",sep = '/'))
 
-trhold = results$trhold %>% 
+trhold = NULL; df0=NULL; df=NULL
+trhold = rbind(trhold,results$trhold %>% 
   filter( proposal %in% c("random", "optimal", "modified")) %>%
   mutate(proposal=factor(proposal, levels=c("random", "optimal", "modified"))) %>% mutate(prob="m1")
-  #mutate(proposal = factor(case_when(proposal=="random"~"random - N",proposal=="plr"~"PLR - N", proposal=="total"~"random - N0",proposal=="optimal"~"optimal - N", proposal=="modified"~"modified - N", proposal=="uniform"~"uniform - N", proposal=="plr-modified"~"PLR modified - N",.default = proposal), levels=c("random - N","optimal - N", "random - N0", "modified - N", "PLR - N", "uniform - N","PLR modified - N"))) %>%
-  
-df0 = results$df %>% filter(proposal=="true") %>% mutate(prob="m1")
-df = results$df %>% filter( proposal %in% c("random", "optimal", "modified")) %>%
-  mutate(proposal=factor(proposal, levels=c("random", "optimal", "modified"))) %>% mutate(prob="m1")
+)
+df0 = rbind(df0,results$df %>% filter(proposal=="true") %>% mutate(prob="m1"))
+df = rbind(df, results$df %>% filter( proposal %in% c("random", "optimal", "modified")) %>%
+  mutate(proposal=factor(proposal, levels=c("random", "optimal", "modified"))) %>% mutate(prob="m1"))
 
 p1= ggplot() + 
   geom_line(data= df0%>% filter( proposal!="uniform - N") %>%
