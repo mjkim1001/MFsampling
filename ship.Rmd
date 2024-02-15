@@ -1,0 +1,404 @@
+---
+title: "ship"
+output: html_document
+date: '2023-11-20'
+---
+
+```{r setup, include=FALSE}
+library(foreach)
+library(doParallel)
+library(stats)
+library(ggplot2)
+library(ks)
+library(tidyverse)
+library(rv)
+library(R.utils)
+library(segmented)
+library(rootSolve)
+library(gridExtra)
+library(cowplot)
+library(evmix)
+library(tidyquant)
+library(ggdist)
+library(ggthemes)
+homedir='..'
+scriptsdir <- file.path(homedir, "scripts")
+sourceDirectory(scriptsdir, recursive=TRUE, modifiedOnly=FALSE, verbose=TRUE)
+
+```
+
+
+## Save the SC values: enough to call it once
+
+```{r eval=F}
+for(i in 1:3){
+  file_list <- list.files(path="./MFclusterN5", pattern=sprintf("\\.Extrema0%d$",i), full.names=TRUE)
+  X01 <- do.call(rbind, lapply(file_list, function(file) {
+    read.table(file, header=FALSE)
+  }))
+  colnames(X01) = c("seed","minTime", "min", "maxTime", "max")
+  
+  X01 = X01 %>% arrange(seed)
+  saveRDS(X01, file = sprintf("./MFclusterN15/Extrema0%d.rds",i))
+  
+}
+
+```
+
+## Read SC values: record maxima and minima
+
+```{r}
+X01 = as_tibble(readRDS("./MFclusterN5/Extrema01.rds"))
+X02 = as_tibble(readRDS("./MFclusterN5/Extrema02.rds"))
+X03 = as_tibble(readRDS("./MFclusterN5/Extrema03.rds"))
+X01
+```
+
+```{r}
+rbind(X01 %>% mutate(type="Pitch"),
+      X02 %>% mutate(type="Heave"),
+      X03 %>% mutate(type="VBM")) %>% 
+  ggplot(aes(x=max))  +
+  geom_histogram(bins = 30, fill = "blue", color = "black") +
+  theme_minimal() +
+  facet_grid(~type, scales = "free_x")
+
+```
+
+## Save seeds for LAMP run: need to call it once
+
+```{r eval=F}
+save_seeds<-function(r,nmid=100,motionType="Pitch", recordType="max",seedType="max"){
+  if(motionType=="Pitch"){
+    X=X01
+  }else if(motionType=="Heave"){
+    X=X02
+  }else if(motionType=="VBM"){
+    X=X03
+  }
+  if(recordType=="max"){
+    X = X%>%mutate(value=max)
+  }else if(recordType=="min"){
+    X = X%>%mutate(value=min)
+  }
+  if(seedType=="min"){
+    seeds <- X %>% arrange(value) %>%
+                head(r) %>%
+                pull(seed)
+  }else if(seedType=="max"){
+    seeds <- X %>% arrange(desc(value)) %>%
+                head(r) %>%
+                pull(seed)
+  }else if(seedType=="mid"){
+    xL= (X %>%arrange(value))$value[r]
+    xR= (X %>%arrange(desc(value)))$value[r]
+    set.seed(2023)
+    uniform_values <- runif(nmid, min = xL, max = xR)
+    selected_rows <- c(save_seeds(r,nmid=nmid,motionType,recordType,"min"), save_seeds(r,nmid=nmid,motionType,recordType,"max"))
+    nearest_neighbors <- do.call(rbind, lapply(uniform_values, function(x) {
+        available_m <- X$value[!X$seed %in% selected_rows]
+      
+        if(length(available_m) > 0) {
+          nearest_m <- available_m[which.min(abs(available_m - x))]
+          #Find the nearest value and its seed
+          nearest_row <- (X %>% filter(value == nearest_m))[1,]
+          selected_rows <<- c(selected_rows, nearest_row$seed)
+          return(nearest_row)
+        } else {
+          print('No data available')
+          return(NULL)
+        }
+      }))
+      seeds=nearest_neighbors$seed
+  }
+  formatted_numbers <- sapply(seeds, function(x) {
+        paste(strsplit(as.character(sprintf("\t%05d", x)), "")[[1]], collapse = "")
+      })
+    writeLines(formatted_numbers, sprintf("%s_%s_record%s%d.txt",seedType,motionType,recordType,r))
+    formatted_numbers <- sapply(seeds, function(x) {
+        paste(strsplit(as.character(sprintf("lamprun onrflnd_10kt_ss7a_%05d.in & ", x)), "")[[1]], collapse = "")
+      })
+    writeLines(formatted_numbers, sprintf("%s_%s_record%s_input%d.txt",seedType,motionType,recordType,r))
+    return(seeds)
+}
+
+save_seeds(r=50, nmid=100, motionType="Pitch", recordType="max", seedType = "mid")
+save_seeds(r=50, nmid=100, motionType="Pitch", recordType="min", seedType = "mid")
+
+```
+
+```{r}
+# seed=50372
+# data <- read.table(sprintf("./motion/onrflnd_10kt_ss7a_%05d.mot",seed),skip = 2, header = T)
+# data2 <- read.table(sprintf("./flh_irreg3a_1-00%d.mot",seed),skip = 2, header = T)
+# colnames(data2) = colnames(data)
+# rbind(data %>% mutate(type="lamp"), data2 %>% mutate(type="sc" )) %>% filter(Time<=180) %>% ggplot() + geom_line(aes(Time, Rot_Y, color=type)) 
+
+```
+
+## Read LAMP run data
+
+```{R}
+read_seeds<-function(r,motionType="Pitch", recordType="max",filepath="motionN5recordmax"){
+  if(motionType=="Pitch"){
+    X=X01 %>% mutate(max=max*180/pi, min=min*180/pi)
+    idx=6
+  }else if(motionType=="Heave"){
+    X=X02
+    idx=4
+  }else if(motionType=="VBM"){
+    X=X03
+  }
+  if(recordType=="max"){
+    X = X%>%mutate(value=max)
+    extract <-function(x){max(x)}
+  }else if(recordType=="min"){
+    X = X%>%mutate(value=min)
+    extract <-function(x){min(x)}
+  }
+  
+  min_seeds <<- as_vector(read.table(sprintf("%s_%s_record%s%d.txt","min",motionType,recordType,r)))
+  max_seeds <<- as_vector(read.table(sprintf("%s_%s_record%s%d.txt","max",motionType,recordType,r)))
+  mid_seeds <<- as_vector(read.table(sprintf("%s_%s_record%s%d.txt","mid",motionType,recordType,r)))
+  LAMPrun = NULL
+  for (seed in min_seeds){
+    data <- read.table(sprintf("./%s/onrflnd_10kt_ss7a_%05d.mot",filepath,seed),skip = 2, header = T)
+    LAMPrun = rbind(LAMPrun, data.frame(lamp = extract(data[idx]), seed = seed, type = "L"))
+  }
+  
+  for (seed in max_seeds){
+    data <- read.table(sprintf("./%s/onrflnd_10kt_ss7a_%05d.mot",filepath,seed),skip = 2, header = T)
+    LAMPrun = rbind(LAMPrun, data.frame(lamp = extract(data[idx]), seed = seed, type = "R"))
+  }
+  
+  for (seed in mid_seeds){
+    data <- read.table(sprintf("./%s/onrflnd_10kt_ss7a_%05d.mot",filepath,seed),skip = 2, header = T)
+    LAMPrun = rbind(LAMPrun, data.frame(lamp = extract(data[idx]), seed = seed, type = "0"))
+  }
+  return(list(LAMPrun=LAMPrun, X=X))
+}
+
+ship = read_seeds(r=50,motionType="Pitch",recordType="max",filepath="motionN5rmax")
+X=ship$X
+r=50
+xL= (X %>%arrange(value))$value[r]
+xR= (X %>%arrange(desc(value)))$value[r]
+data = ship$LAMPrun %>% left_join(X, by= "seed") %>% mutate(SC=value) %>% dplyr::select(lamp, SC, seed, type)
+p=data %>% mutate(type=case_when(type=="L"~"SC:tb", type=="R"~"SC:tt",.default = "SC:rd")) %>%
+  ggplot() + geom_point(aes(SC, lamp, shape=type),size=3) +
+  geom_vline(data= data.frame(xLR=c(xL,xR), type=c("xL","xR")) ,aes(xintercept = xLR, color="xL/xR"),linetype='dashed') +
+  scale_colour_manual(values=c("red"), labels=c("xL,xR")) +
+  scale_shape_manual(values=c(1,2,0))+
+  #geom_abline(intercept = 0, slope = 1, color="black", 
+  #            linetype="dashed", size=0.5)+
+  labs(x = "SC pitch record maximum (deg)", y = "LAMP pitch record maxima (deg)") +
+  guides(color = guide_legend(order = 1), shape = guide_legend(order = 1)) +
+  theme(legend.position = c(0.325, 0.975),
+        legend.justification = c("right", "top"),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 12),
+        axis.text=element_text(size=12),
+        axis.title=element_text(size=12),
+        legend.box = "vertical",
+        legend.spacing.x = unit(0, "cm"), 
+        legend.spacing.y = unit(-0.1, "cm") ) 
+ggsave(filename = sprintf("./plot_pitch_lamp_sc_scatter%dN05N200rmax.png",r), plot = p, width = 5, height = 4.5)
+
+
+```
+
+## Density estimate for SC values
+
+```{r}
+x_pop=X$value
+FXhat = function(x) mean(x_pop<=x) 
+ggplot(data.frame(x=x_pop), aes(x = x)) + 
+  geom_histogram(aes(y = ..density..),
+                 colour = 1, fill = "white") +
+  geom_density() 
+
+# dgumbel <- function(x, mu, beta){
+#   1/beta * exp(-(x - mu)/beta - exp(-(x - mu)/beta))
+# }
+# pgumbel <- function(q, mu, beta) exp(-exp(-(q-mu)/beta))
+# qgumbel <- function(p, mu, beta) mu-beta*log(-log(p))
+# library(evir)
+# recordType="min"
+# if(recordType=="min"){
+#   fit=gumbel(-x_pop)
+# }else{
+#   fit=gumbel(x_pop)
+# }
+```
+
+
+```{r}
+my_kde= kde(x=x_pop, h=0.2)
+fX = function(x){predict(my_kde, x=x)}
+# fX = function(x){if(recordType=="min") {dgumbel(-x, mu=fit$par.ests[2], beta = fit$par.ests[1])}else{
+#       dgumbel(x, mu=fit$par.ests[2], beta = fit$par.ests[1])
+# }}
+
+p=ggplot(data.frame(x=x_pop), aes(x = x)) + 
+  geom_histogram(aes(y = ..density..),
+                 colour = "darkgray", fill = "gray", bins=30) +
+  #geom_density() + 
+  stat_function(fun= function(x){
+    fX(x)})+
+  #stat_function(fun= function(x){predict(my_kde, x=x)},col='blue')+
+  labs(title = "Histogram and PDF of SC pitch record maxima", x = "record maximum (deg)", y = "density") +
+  theme(
+        axis.text=element_text(size=12),
+        axis.title=element_text(size=12),
+        plot.title = element_text(hjust = 0.5) # This centers the title
+  ) 
+
+ggsave(filename = sprintf("./SC_densityN05rmax%d.png",1), plot = p, width = 5, height = 4.5)
+
+ggplot(data.frame(x=x_pop), aes(x = x)) + 
+  stat_function(fun= function(x){log10(predict(my_kde, x=x))})+
+  stat_function(fun= function(x){log10(fX(x))}, col='red')+
+  labs(x = "SC", y = "density") +
+  theme(
+        axis.text=element_text(size=12),
+        axis.title=element_text(size=12),
+         ) 
+```
+
+## Function definitions for kernel estimates (for confidence interval)
+
+```{r}
+GK <- function(x){ # Gaussian kernel function
+  dnorm(x,0,h)
+}
+GK <- Vectorize(GK)
+empirical_est <- function(y,data,d=2){ # Empirical estimate of E[(K_h(y-Y)w(X))^d]
+  weights=data$weights*(nrow(data))/sum(data$weights)
+  sum(GK(y-data$y_vec)^d*(weights)^d)/(nrow(data))
+}
+```
+
+## Density estimate and the confidence interval
+
+```{r}
+r=50;n=200;w = (n-2*r)/r
+force(nrow(data)==n)
+PL = FXhat(xL);  PR = 1-FXhat(xR)
+data = rbind(data %>% filter(type=="L"), data %>% filter(type==0), data %>% filter(type=="R"))%>%
+  mutate(x_vec=SC, y_vec=lamp, weights = case_when(type=="L"~w*PL, type=="R"~ w*PR, .default = (xR-xL)*fX(SC)))
+recordType="max"
+if(recordType=="max"){
+  y_grid = seq(4,12, length.out=200)
+}else{
+  y_grid = seq(-18,-2, length.out=200)
+}
+
+h=0.4;rr=30;rl=55
+df_unif= generate_dens(data,"uniform", y_grid, h0=h, N0=nrow(X), rr= r, r=r, hetero=F)
+trhold = threshold_IS(data, N0=nrow(X), rr= c(rl,rr)) %>% mutate(proposal="uniform")
+df_modi = generate_dens(data,"modified", y_grid, h0=h, N0=nrow(X), rr= c(rl,rr), r=r, hetero=F)
+trhold = rbind(trhold, threshold_IS(data,  N0=nrow(X), rr= c(rl,rr)) %>% mutate(proposal="modified"))
+
+y_sort = sort(data$y_vec)
+yL =y_sort[rl]; yR=y_sort[n-rr+1]
+FbarL = (Fbar_generator(data,top=F))(yL)
+FbarR = (Fbar_generator(data,top=T))(yR)
+fit.gpd_R = fgpd.weight(data$y_vec, weight=data$weights, u = yR)
+fit.gpd_L = fgpd.weight(-data$y_vec, weight=data$weights, u = -yL)
+Var_FbarR= ((Fbar_generator(data,top=T,d=2))(yR)- FbarR^2)/nrow(data)
+Var_FbarL= ((Fbar_generator(data,top=F,d=2))(yL)-FbarL^2)/nrow(data)
+#upper_FbarR= FbarR +qnorm(1-alpha/2)*sqrt(Var_FbarR)
+
+mu = c(fit.gpd_R$xi, fit.gpd_R$sigmau)
+Winv = 1/rr * matrix(c(1+ mu[1], -mu[2], -mu[2], 2*(mu[2])^2),nrow=2,ncol=2)
+gpdparamR<-mvrnorm(n=100, mu=mu, Sigma=Winv)
+#colnames(gpdparamR)<-c("xi","sigma")
+# CI_R <- apply(gpdparamR, 1, function(params) {
+#   sapply(y_grid[y_grid>yR],function(x) evmix::dgpd(x, u = yR, xi = params[1], sigmau = params[2], phiu = FbarR))
+# })
+
+
+mu = c(fit.gpd_L$xi, fit.gpd_L$sigmau)
+Winv = 1/rl * matrix(c(1+ mu[1], -mu[2], -mu[2], 2*(mu[2])^2),nrow=2,ncol=2)
+gpdparamL<-mvrnorm(n=100, mu=mu, Sigma=Winv)
+
+```
+
+```{r}
+####
+# Check if our estimator works well
+# a=kde(x=c(-1,0,1),h=0.4) 
+# cbind(a$estimate, 
+#       sapply(a$eval.points,function(y){empirical_est(y,data.frame(y_vec=c(-1,0,1),weights=c(1,1,1)),d=1,N=3)}),
+#       sqrt(sapply(a$eval.points,function(y){empirical_est(y,data.frame(y_vec=c(-1,0,1),weights=c(1,1,1)),d=2,N=3)})))
+df_unif %>% dplyr::select(y,est_dens) %>%  
+  mutate(S1=sapply(y,function(t){empirical_est(t,data,d=1)}),
+         S2=sapply(y,function(t){empirical_est(t,data,d=2)}))
+####
+
+alpha=0.05; talpha = (1-sqrt(1-alpha))/2
+df_unif=df_unif %>% 
+  mutate(S2=sapply(y,function(t){empirical_est(t,data,d=2)}), 
+         S1=sapply(y,function(t){empirical_est(t,data,d=1)})) %>%
+  mutate(upper=exp(log(est_dens)+qnorm(1-alpha/2)*sqrt((S2-S1^2)/n)/est_dens),
+         lower=exp(log(est_dens)-qnorm(1-alpha/2)*sqrt((S2-S1^2)/n)/est_dens))
+
+df_modi=df_modi %>% 
+  mutate(S2=sapply(y,function(x){empirical_est(x,data,d=2)}), 
+         S1=sapply(y,function(x){empirical_est(x,data,d=1)}),
+         quantileUR = apply(apply(gpdparamR, 1, function(params) {
+  sapply(y,function(x) evmix::dgpd(x, u = yR, xi = params[1], sigmau = params[2]))
+}),1,function(x){quantile(x,1-talpha)}),
+        quantileLR = apply(apply(gpdparamR, 1, function(params) {
+  sapply(y,function(x) evmix::dgpd(x, u = yR, xi = params[1], sigmau = params[2]))
+}),1,function(x){quantile(x,talpha)}),
+        quantileUL = apply(apply(gpdparamL, 1, function(params) {
+  sapply(y,function(x) evmix::dgpd(-x,u=-yL, xi = params[1],  sigmau = params[2]))
+}),1,function(x){quantile(x,1-talpha)}),
+        quantileLL = apply(apply(gpdparamL, 1, function(params) {
+  sapply(y,function(x) evmix::dgpd(-x,u=-yL, xi = params[1],  sigmau = params[2]))
+}),1,function(x){quantile(x,talpha)})) %>%
+
+  mutate(upper=case_when(y<=yL~ exp(log(FbarL)+qnorm(1-talpha)*sqrt(Var_FbarL)/FbarL) *quantileUL, 
+                         y>yR~ exp(log(FbarR)+qnorm(1-talpha)*sqrt(Var_FbarR)/FbarR) *quantileUR,
+                         .default = exp(log(est_dens)+qnorm(1-alpha)*sqrt((S2-S1^2)/n)/est_dens)),
+         lower=case_when(y<=yL~ exp(log(FbarL)-qnorm(1-talpha)*sqrt(Var_FbarL)/FbarL) *quantileLL, 
+                         y>yR~ exp(log(FbarR)-qnorm(1-talpha)*sqrt(Var_FbarR)/FbarR) * quantileLR,
+                         .default = exp(log(est_dens)-qnorm(1-alpha)*sqrt((S2-S1^2)/n)/est_dens)))
+
+
+df=rbind(df_unif,df_modi %>% dplyr::select(-c(quantileLL,quantileUL,quantileLR,quantileUR)))
+  
+p=ggplot() + 
+    geom_point(data=subset(df,is_support), aes(x=y, y=log10(est_dens), color = "observed"),size=0.5) +
+    geom_point(data=subset(df,!is_support), aes(x=y, y=log10(est_dens), color = "extended"),size=0.5) +
+    geom_line(data=df,aes(y, y=log10(upper)),linetype="dotdash") +
+    geom_line(data=df,aes(y, y=log10(lower)),linetype="dotdash") +
+    facet_wrap(~proposal) +ylim(-7,0)+# xlim(-25,25)+
+    ylab("Log10 of Estimated Density") + labs(color="")+xlab("LAMP pitch record maximum")+
+    geom_vline(data= trhold %>% pivot_longer(c("yL","yR"),names_to = "trhold", values_to="y") ,
+               aes(xintercept = y, color="GPD threshold"),linetype="dashed") +
+    scale_color_manual(
+      values=c("observed"="black", "extended"="blue", "GPD threshold"='green4'), 
+      labels=c("observed", "extended",'GPD threshold'),
+      breaks=c("observed", "extended", "GPD threshold")
+    )+
+    guides(color = guide_legend(override.aes = list(alpha = 1,
+       linetype = c("blank", "blank", "dashed"),
+      shape = c(19, 19, NA)
+      ))) +
+    theme(
+      legend.position='top', 
+      legend.direction="horizontal",
+      text=element_text(size=12),
+      legend.title=element_text(size=12),
+      legend.text=element_text(size=12),
+      legend.background = element_rect(fill="transparent"),
+      strip.text.x = element_text(size=12)
+    )
+
+ggsave(filename = sprintf("pitch_rmaxr%dl%dh%d_indep.png",rr,rl,10*h), plot = p, width = 8, height = 4)
+
+```
+
+
