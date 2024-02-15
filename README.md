@@ -1,4 +1,4 @@
-# MF sampling
+# Multi-fidelity density estimation via importance sampling
 
 This GitHub repository contains the R code for the paper titled "Sampling low-fidelity outputs for estimation of high-fidelity density and its tails "
 
